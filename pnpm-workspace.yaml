@@ -1,0 +1,3 @@
+allowBuilds:
+  classic-level: true
+  esbuild: true

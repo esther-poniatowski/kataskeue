@@ -1,0 +1,404 @@
+{
+  "$id": "https://github.com/esther-poniatowski/obsidian-plugin-materializer/schemas/obsidian-plugins.schema.json",
+  "title": "Obsidian plugin profile",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "format_version": {
+      "type": "number",
+      "const": 1
+    },
+    "runtime": {
+      "type": "object",
+      "properties": {
+        "minimum_obsidian": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checked_obsidian": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checked_installer": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "minimum_obsidian",
+        "checked_obsidian",
+        "checked_installer"
+      ],
+      "additionalProperties": false
+    },
+    "plugins": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "repository": {
+                "type": "string",
+                "pattern": "^https:\\/\\/[^/]"
+              },
+              "bundle": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "release"
+                      },
+                      "tag": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "tag"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "artifact"
+                      },
+                      "locator": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "source_commit": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{40}$"
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "locator",
+                      "source_commit",
+                      "sha256"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "files": {
+                "type": "object",
+                "properties": {
+                  "manifest.json": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "main.js": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "styles.css": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                },
+                "required": [
+                  "manifest.json",
+                  "main.js"
+                ],
+                "additionalProperties": false
+              },
+              "settings": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "policy": {
+                        "type": "string",
+                        "const": "native-portable"
+                      }
+                    },
+                    "required": [
+                      "policy"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "policy": {
+                        "type": "string",
+                        "const": "machine-local"
+                      }
+                    },
+                    "required": [
+                      "policy"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "policy": {
+                        "type": "string",
+                        "const": "project-owned"
+                      },
+                      "source": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))(?!.*\\\\).+$"
+                      }
+                    },
+                    "required": [
+                      "policy",
+                      "source"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "policy": {
+                        "type": "string",
+                        "const": "losslessly-projected"
+                      },
+                      "source": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))(?!.*\\\\).+$"
+                      },
+                      "adapter": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "policy",
+                      "source",
+                      "adapter"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "requirement": {
+                "type": "string",
+                "const": "required"
+              },
+              "enabled": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "repository",
+              "bundle",
+              "files",
+              "settings",
+              "requirement",
+              "enabled"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "repository": {
+                "type": "string",
+                "pattern": "^https:\\/\\/[^/]"
+              },
+              "bundle": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "release"
+                      },
+                      "tag": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "tag"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "artifact"
+                      },
+                      "locator": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "source_commit": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{40}$"
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "locator",
+                      "source_commit",
+                      "sha256"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "files": {
+                "type": "object",
+                "properties": {
+                  "manifest.json": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "main.js": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "styles.css": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                },
+                "required": [
+                  "manifest.json",
+                  "main.js"
+                ],
+                "additionalProperties": false
+              },
+              "settings": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "policy": {
+                        "type": "string",
+                        "const": "native-portable"
+                      }
+                    },
+                    "required": [
+                      "policy"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "policy": {
+                        "type": "string",
+                        "const": "machine-local"
+                      }
+                    },
+                    "required": [
+                      "policy"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "policy": {
+                        "type": "string",
+                        "const": "project-owned"
+                      },
+                      "source": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))(?!.*\\\\).+$"
+                      }
+                    },
+                    "required": [
+                      "policy",
+                      "source"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "policy": {
+                        "type": "string",
+                        "const": "losslessly-projected"
+                      },
+                      "source": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))(?!.*\\\\).+$"
+                      },
+                      "adapter": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "policy",
+                      "source",
+                      "adapter"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "requirement": {
+                "type": "string",
+                "const": "optional"
+              },
+              "enabled": {
+                "type": "boolean",
+                "const": false
+              }
+            },
+            "required": [
+              "id",
+              "repository",
+              "bundle",
+              "files",
+              "settings",
+              "requirement",
+              "enabled"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "description": "Plugin identifiers must be unique and sorted. The executable parser enforces these cross-entry constraints.",
+      "x-executable-constraints": [
+        "unique-plugin-identifiers",
+        "identifier-order"
+      ]
+    }
+  },
+  "required": [
+    "format_version",
+    "runtime",
+    "plugins"
+  ],
+  "additionalProperties": false
+}
