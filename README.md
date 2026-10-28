@@ -48,22 +48,33 @@ Replace the example values with 64-character lowercase hexadecimal digests. Comp
 
 Three fields identify the Obsidian releases checked against the profile:
 
-| Field | Meaning |
-| --- | --- |
-| `minimum_obsidian` | profile requires this Obsidian application release or a newer release |
-| `checked_obsidian` | maintainers tested the profile with this Obsidian application release |
-| `checked_installer` | maintainers tested the profile with this Obsidian installer release |
+| Field               | Meaning                                                               |
+| ------------------- | --------------------------------------------------------------------- |
+| `minimum_obsidian`  | profile requires this Obsidian application release or a newer release |
+| `checked_obsidian`  | maintainers tested the profile with this Obsidian application release |
+| `checked_installer` | maintainers tested the profile with this Obsidian installer release   |
 
 The receipt repeats these values. The materializer does not inspect the Obsidian runtime installed on the target machine.
 
 Each plugin selects one settings policy:
 
-| Policy | Materializer behavior |
-| --- | --- |
-| `native-portable` | preserves the existing native `data.json`; the consumer tracks that file |
-| `machine-local` | preserves the existing native `data.json`; the consumer leaves that file untracked |
-| `project-owned` | requires a declared project file and removes native `data.json` |
-| `losslessly-projected` | lets the library API generate native `data.json` through a named adapter; the CLI ships no concrete adapter yet |
+| Policy                 | Materializer behavior                                                                                      |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `native-portable`      | preserves the existing native `data.json`; the consumer tracks that file                                   |
+| `machine-local`        | preserves the existing native `data.json`; the consumer leaves that file untracked                         |
+| `project-owned`        | requires a declared project file and removes native `data.json`                                            |
+| `losslessly-projected` | generates native `data.json` through a named adapter; the CLI supplies the supported adapters listed below |
+
+A plugin may also declare root-level `mutable_json_files`. A declared file may be absent. When present, its path must have a lowercase JSON filename, and its content must remain valid JSON. Names must be unique, sorted and distinct from the bundle files, the settings file and the development marker. Other mutable file types and directories are unsupported, and undeclared entries fail reconciliation.
+
+The command-line interface supplies two settings adapters:
+
+| Adapter                           | Source contract                                                  |
+| --------------------------------- | ---------------------------------------------------------------- |
+| `ekphrasis@1`                     | portable schema-registry path, path rules and commit delay       |
+| `full-calendar-remastered@0.13.7` | Tasks calendar, Tasks integration and portable interface choices |
+
+The [settings-adapter guide](docs/settings-adapters.md) defines the required keys and admitted values of both source files.
 
 ## Commands
 
@@ -103,12 +114,12 @@ Each command holds `.obsidian-plugin-materializer.lock` for the complete check o
 
 Remote releases and retained artifacts enter through a provider. Local builds enter through the separate override record. The available routes have the following status:
 
-| Source | Current route |
-| --- | --- |
-| public GitHub release | built-in provider through `obsidian-launcher` |
-| private release | provider interface; authenticated implementation pending |
-| retained artifact | provider interface; immutable artifact implementation pending |
-| local build | untracked override mapped to a declared plugin identifier |
+| Source                | Current route                                                 |
+| --------------------- | ------------------------------------------------------------- |
+| public GitHub release | built-in provider through `obsidian-launcher`                 |
+| private release       | provider interface; authenticated implementation pending      |
+| retained artifact     | provider interface; immutable artifact implementation pending |
+| local build           | untracked override mapped to a declared plugin identifier     |
 
 ## Documentation
 

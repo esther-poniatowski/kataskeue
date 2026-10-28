@@ -118,6 +118,14 @@
                 ],
                 "additionalProperties": false
               },
+              "mutable_json_files": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9][a-z0-9._-]*\\.json$"
+                }
+              },
               "settings": {
                 "oneOf": [
                   {
@@ -292,6 +300,14 @@
                   "main.js"
                 ],
                 "additionalProperties": false
+              },
+              "mutable_json_files": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9][a-z0-9._-]*\\.json$"
+                }
               },
               "settings": {
                 "oneOf": [

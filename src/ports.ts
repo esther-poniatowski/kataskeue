@@ -27,6 +27,7 @@ export interface PluginInstaller {
 
 /** Generates a complete native settings file from a project-owned source. */
 export interface SettingsAdapter {
+  supports(plugin: PluginRecord): boolean;
   project(source: string, destination: string): Promise<void>;
 }
 

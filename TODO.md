@@ -11,6 +11,6 @@ These tasks prepare the tool for its first vault.
 - [x] Verify the direct `obsidian-launcher` adapter contracts.
 - [ ] Fetch private releases through an authenticated provider.
 - [ ] Fetch retained artifacts and verify their archives.
-- [ ] Add lossless settings adapters required by the first consumer profiles.
-- [ ] Qualify the public-release route against an isolated Obsidian runtime.
+- [x] Add lossless settings adapters required by the first consumer profiles.
+- [x] Qualify the public-release route against an isolated Obsidian runtime.
 - [ ] Generate and qualify the first consumer profile.

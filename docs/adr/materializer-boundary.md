@@ -13,6 +13,7 @@ The materializer delegates to `obsidian-launcher`. The launcher downloads public
 - the profile parser validates canonical records and local overrides;
 - provider ports represent private releases and retained artifacts;
 - the digest checker verifies declared files;
+- the reconciler preserves explicitly declared mutable JSON files without classifying them as release payload;
 - the reconciler makes native state equal to the profile;
 - adapters convert governed configuration data;
 - the recovery record preserves enough state to reverse an interrupted change;

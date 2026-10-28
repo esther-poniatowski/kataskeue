@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
+import { constants } from "node:fs";
 import {
   copyFile,
   lstat,
   mkdir,
   mkdtemp,
+  open,
   readFile,
   readdir,
   realpath,
@@ -331,6 +333,11 @@ async function reconcileStage(
       throw new DriftError(`launcher did not install ${plugin.record.id}`);
     }
     await rm(join(pluginRoot, ".hotreload"), { force: true });
+    await preserveMutableJsonFiles(
+      plugin.record,
+      join(targetObsidian, "plugins", plugin.record.id),
+      pluginRoot,
+    );
     await reconcileSettings(
       plugin.record,
       targetObsidian,
@@ -377,6 +384,11 @@ async function reconcileSettings(
     if (adapter === undefined) {
       throw new ProfileError(
         `settings adapter ${plugin.settings.adapter} is unavailable for ${plugin.id}`,
+      );
+    }
+    if (!adapter.supports(plugin)) {
+      throw new ProfileError(
+        `settings adapter ${plugin.settings.adapter} does not support ${plugin.id} at the selected bundle`,
       );
     }
     const source = await resolveSourceFile(
@@ -521,6 +533,7 @@ async function verifyNativeState(
         `undeclared files remain for ${plugin.id}: ${extra.join(", ")}`,
       );
     }
+    await verifyMutableJsonFiles(plugin, pluginRoot);
     await verifySettings(plugin, root, pluginRoot, receiptPlugin.settings);
   }
 }
@@ -709,10 +722,79 @@ async function digestRegularFile(path: string, label: string): Promise<string> {
 
 function allowedPluginFiles(plugin: PluginRecord): ReadonlySet<string> {
   const allowed = new Set<string>(Object.keys(plugin.files));
+  for (const file of plugin.mutable_json_files ?? []) {
+    allowed.add(file);
+  }
   if (plugin.settings.policy !== "project-owned") {
     allowed.add("data.json");
   }
   return allowed;
+}
+
+async function preserveMutableJsonFiles(
+  plugin: PluginRecord,
+  currentPlugin: string,
+  stagedPlugin: string,
+): Promise<void> {
+  for (const file of plugin.mutable_json_files ?? []) {
+    const source = join(currentPlugin, file);
+    const destination = join(stagedPlugin, file);
+    await rm(destination, { force: true });
+    const contents = await readMutableJsonFile(source, `${plugin.id}/${file}`);
+    if (contents === undefined) continue;
+    await writeFile(destination, contents, { mode: 0o600 });
+  }
+}
+
+async function verifyMutableJsonFiles(
+  plugin: PluginRecord,
+  pluginRoot: string,
+): Promise<void> {
+  for (const file of plugin.mutable_json_files ?? []) {
+    await readMutableJsonFile(join(pluginRoot, file), `${plugin.id}/${file}`);
+  }
+}
+
+async function readMutableJsonFile(
+  path: string,
+  label: string,
+): Promise<string | undefined> {
+  let pathState;
+  try {
+    pathState = await lstat(path);
+  } catch (error) {
+    if (isMissing(error)) return undefined;
+    throw error;
+  }
+  if (!pathState.isFile()) {
+    throw new ProfileError(`${label} must be a regular JSON file`);
+  }
+  let handle;
+  try {
+    handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  } catch (error) {
+    if (isMissing(error)) return undefined;
+    throw error;
+  }
+  try {
+    const handleState = await handle.stat();
+    if (
+      !handleState.isFile() ||
+      pathState.dev !== handleState.dev ||
+      pathState.ino !== handleState.ino
+    ) {
+      throw new ProfileError(`${label} must be a regular JSON file`);
+    }
+    const contents = await handle.readFile("utf8");
+    try {
+      JSON.parse(contents);
+    } catch {
+      throw new ProfileError(`${label} must contain valid JSON`);
+    }
+    return contents;
+  } finally {
+    await handle.close();
+  }
 }
 
 function resolveWithin(root: string, path: string): string {

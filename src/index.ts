@@ -33,3 +33,6 @@ export type {
   PluginInstaller,
   SettingsAdapter,
 } from "./ports.js";
+export { EkphrasisSettingsAdapter } from "./infrastructure/settings/ekphrasisSettingsAdapter.js";
+export { FullCalendarRemasteredSettingsAdapter } from "./infrastructure/settings/fullCalendarRemasteredSettingsAdapter.js";
+export { createSettingsAdapters } from "./infrastructure/settings/settingsAdapters.js";

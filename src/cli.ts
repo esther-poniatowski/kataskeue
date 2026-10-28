@@ -16,6 +16,7 @@ import {
 import { LauncherBundleProvider } from "./infrastructure/launcherBundleProvider.js";
 import { GitOverrideInspector } from "./infrastructure/gitOverrideInspector.js";
 import { ObsidianLauncherInstaller } from "./infrastructure/obsidianLauncherInstaller.js";
+import { createSettingsAdapters } from "./infrastructure/settings/settingsAdapters.js";
 
 async function main(argv: readonly string[]): Promise<void> {
   const [command, ...commandArguments] = argv;
@@ -72,6 +73,7 @@ async function main(argv: readonly string[]): Promise<void> {
       bundles: new LauncherBundleProvider(launcher),
       installer: new ObsidianLauncherInstaller(launcher),
       overrideInspector: new GitOverrideInspector(),
+      settingsAdapters: createSettingsAdapters(),
     },
   );
   process.stdout.write("plugin profile materialized and verified\n");

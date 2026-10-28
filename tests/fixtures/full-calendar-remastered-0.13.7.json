@@ -1,0 +1,142 @@
+{
+  "sidebarConfig": {
+    "enabled": true,
+    "width": 290,
+    "isCollapsed": false,
+    "collapsedModules": {
+      "mini-month": false,
+      "up-next": false,
+      "task-backlog": false,
+      "agent": false
+    },
+    "moduleOrder": ["mini-month", "up-next", "task-backlog", "agent"]
+  },
+  "githubToken": null,
+  "availabilityGistId": null,
+  "availabilityExportPath": "",
+  "availabilityDefaultTimeRange": {
+    "startTime": "09:00",
+    "endTime": "17:00"
+  },
+  "useLegacyPlaintextCredentials": false,
+  "calendarSources": [
+    {
+      "type": "tasks",
+      "name": "Obsidian Tasks",
+      "color": "#3b82f6",
+      "id": "tasks_1"
+    }
+  ],
+  "defaultCalendarId": null,
+  "firstDay": 1,
+  "initialView": {
+    "desktop": "timeGridWeek",
+    "mobile": "timeGrid3Days"
+  },
+  "timeFormat24h": true,
+  "clickToCreateEventFromMonthView": true,
+  "displayTimezone": "Europe/Paris",
+  "lastSystemTimezone": "Europe/Paris",
+  "enableAdvancedCategorization": false,
+  "chrono_analyser_config": null,
+  "categorySettings": [],
+  "useCustomGoogleClient": false,
+  "googleClientId": "",
+  "googleClientSecret": "",
+  "googleUseCopyPasteAuth": false,
+  "googleAccounts": [],
+  "useCustomMicrosoftClient": false,
+  "microsoftClientId": "",
+  "microsoftProxyBaseUrl": "",
+  "microsoftAccounts": [],
+  "businessHours": {
+    "enabled": false,
+    "daysOfWeek": [1, 2, 3, 4, 5],
+    "startTime": "09:00",
+    "endTime": "17:00"
+  },
+  "enableBackgroundEvents": true,
+  "enableReminders": true,
+  "workspaces": [],
+  "activeWorkspace": null,
+  "showEventInStatusBar": false,
+  "highlightCurrentOrNextEvent": true,
+  "enableLivePreview": true,
+  "slotMinTime": "00:00",
+  "slotMaxTime": "24:00",
+  "allDaySlot": true,
+  "timeGridDayHeaderFormat": "day-mmdd",
+  "weekends": true,
+  "hiddenDays": [],
+  "dayMaxEvents": false,
+  "activityWatch": {
+    "enabled": false,
+    "apiUrl": "http://127.0.0.1:5600",
+    "lastSyncTime": 0,
+    "autoSyncEnabled": false,
+    "autoSyncIntervalMins": 10,
+    "targetCalendarId": "",
+    "syncStrategy": "auto",
+    "customDateStart": "",
+    "customDateEnd": "",
+    "profiles": []
+  },
+  "tasksIntegration": {
+    "backlogDateTarget": "scheduledDate",
+    "calendarDisplayDateTarget": "scheduledDate",
+    "openEditModalAfterBacklogDrop": false,
+    "taskDisplayFormat": "dayPlanner",
+    "includeGlobalQueryInBacklog": true,
+    "backlogQuery": ""
+  },
+  "milestones": {
+    "counters": {},
+    "unlockedAt": {},
+    "shown": {}
+  },
+  "enableMonthlyStatsReport": false,
+  "lastMonthlyMilestonesGeneratedMonth": null,
+  "lastMonthlyMilestonesCheckDate": null,
+  "fcrReminderCompanion": {
+    "enabled": false,
+    "apiUrl": "http://127.0.0.1:45677"
+  },
+  "apiTokens": {},
+  "authorizedTokens": {},
+  "enableLocalServer": false,
+  "localServerPort": 8540,
+  "milestoneNotifierDuration": 8000,
+  "enableDefaultReminder": true,
+  "defaultReminderMinutes": 10,
+  "currentVersion": "0.13.7",
+  "linkedNotesDirectory": "",
+  "linkedNoteLinkStrategy": "deadline",
+  "taskBacklogLastProviderId": "",
+  "caldavTaskInboxLastCalendarId": "",
+  "weatherCity": "",
+  "weatherLatitude": null,
+  "weatherLongitude": null,
+  "weatherHide": true,
+  "weatherInputMode": "city",
+  "weatherUnit": "C",
+  "linkedNoteTemplate": "# {{title}}\n\n**Date**: {{date}}\n**Time**: {{timeString}}\n**Location**: {{location}}\n**Calendar**: {{calendarName}}\n\n## Description\n{{description}}\n\n## Notes\n- ",
+  "enableLinkedNoteTemplatesPreset": false,
+  "linkedNoteTemplatesPresets": [],
+  "openDailyNoteOnDateClick": false,
+  "breakTimer": {
+    "enabled": false,
+    "intervalMins": 60,
+    "idleThresholdMins": 30,
+    "breakDurationSecs": 30
+  },
+  "agent": {
+    "enabled": false,
+    "endpointUrl": "https://api.openai.com/v1",
+    "model": "gpt-4o-mini",
+    "apiKey": "",
+    "temperature": 0.2,
+    "specUrl": "https://raw.githubusercontent.com/obsidian-full-calendar-remastered/plugin-full-calendar/main/docs/architecture/api/agent-spec.md",
+    "maxRetries": 3,
+    "timeoutMs": 60000
+  }
+}

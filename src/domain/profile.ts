@@ -9,6 +9,12 @@ export const runtimeFileNames = [
 ] as const;
 export type RuntimeFileName = (typeof runtimeFileNames)[number];
 
+const reservedPluginFileNames = new Set([
+  ...runtimeFileNames,
+  "data.json",
+  ".hotreload",
+]);
+
 export const sha256Schema = z.string().regex(/^[0-9a-f]{64}$/);
 export const commitSchema = z.string().regex(/^[0-9a-f]{40}$/);
 export const pluginIdSchema = z.string().regex(/^[a-z0-9][a-z0-9._-]*$/);
@@ -16,6 +22,37 @@ const relativePathSchema = z
   .string()
   .min(1)
   .regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))(?!.*\\).+$/);
+const mutableJsonFileNameSchema = z
+  .string()
+  .min(1)
+  .regex(/^[a-z0-9][a-z0-9._-]*\.json$/);
+const mutableJsonFilesSchema = z
+  .array(mutableJsonFileNameSchema)
+  .superRefine((files, context) => {
+    if (new Set(files).size !== files.length) {
+      context.addIssue({
+        code: "custom",
+        message: "mutable JSON file names must be unique",
+      });
+    }
+    const sorted = [...files].sort((left, right) => left.localeCompare(right));
+    if (files.some((file, index) => file !== sorted[index])) {
+      context.addIssue({
+        code: "custom",
+        message: "mutable JSON file names must follow identifier order",
+      });
+    }
+    for (const [index, file] of files.entries()) {
+      if (reservedPluginFileNames.has(file)) {
+        context.addIssue({
+          code: "custom",
+          message: `${file} is governed by another profile field`,
+          path: [index],
+        });
+      }
+    }
+  })
+  .optional();
 
 const releaseBundleSchema = z
   .object({ kind: z.literal("release"), tag: z.string().min(1) })
@@ -70,6 +107,7 @@ const pluginFields = {
   repository: z.url().regex(/^https:\/\/[^/]/, "must use HTTPS"),
   bundle: bundleSchema,
   files: runtimeFilesSchema,
+  mutable_json_files: mutableJsonFilesSchema,
   settings: settingsSchema,
 };
 const requiredPluginSchema = z

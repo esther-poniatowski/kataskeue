@@ -74,6 +74,67 @@ test("materializes the exact profile and removes launcher residue", async () => 
   await checkProfile({ vault: fixture.vault, profile: fixture.profile });
 });
 
+test("preserves only declared mutable JSON files", async () => {
+  const fixture = await createFixture({
+    mutableJsonFiles: ["state.previous.json"],
+  });
+  const pluginRoot = join(
+    fixture.vault,
+    ".obsidian",
+    "plugins",
+    "sample-plugin",
+  );
+  await writeFile(join(pluginRoot, "state.previous.json"), '{"kept":true}\n');
+  await applyProfile(
+    { vault: fixture.vault, profile: fixture.profile },
+    {
+      bundles: new StaticProvider(fixture.bundle),
+      installer: new CopyingInstaller(),
+    },
+  );
+  assert.equal(
+    await readFile(join(pluginRoot, "state.previous.json"), "utf8"),
+    '{"kept":true}\n',
+  );
+  await checkProfile({ vault: fixture.vault, profile: fixture.profile });
+  await writeFile(join(pluginRoot, "state.previous.json"), "not JSON\n");
+  await assert.rejects(
+    checkProfile({ vault: fixture.vault, profile: fixture.profile }),
+    ProfileError,
+  );
+});
+
+test("rejects a symlink at a declared mutable JSON file path", async () => {
+  const fixture = await createFixture({
+    mutableJsonFiles: ["state.previous.json"],
+  });
+  const external = join(
+    await mkdtemp(join(tmpdir(), "external-state-")),
+    "state.json",
+  );
+  await writeFile(external, "{}\n");
+  await symlink(
+    external,
+    join(
+      fixture.vault,
+      ".obsidian",
+      "plugins",
+      "sample-plugin",
+      "state.previous.json",
+    ),
+  );
+  await assert.rejects(
+    applyProfile(
+      { vault: fixture.vault, profile: fixture.profile },
+      {
+        bundles: new StaticProvider(fixture.bundle),
+        installer: new CopyingInstaller(),
+      },
+    ),
+    ProfileError,
+  );
+});
+
 test("omits an optional plugin only when absence is proved", async () => {
   const fixture = await createFixture({ requirement: "optional" });
   const missing: BundleProvider = {
@@ -413,6 +474,7 @@ test("records and verifies losslessly projected settings", async () => {
   await mkdir(join(fixture.vault, "settings"));
   await writeFile(join(fixture.vault, "settings", "sample.yml"), "value: 1\n");
   const adapter: SettingsAdapter = {
+    supports: () => true,
     async project(source, destination) {
       await writeFile(
         destination,
@@ -432,6 +494,35 @@ test("records and verifies losslessly projected settings", async () => {
   await assert.rejects(
     checkProfile({ vault: fixture.vault, profile: fixture.profile }),
     DriftError,
+  );
+});
+
+test("rejects an incompatible settings adapter before projection", async () => {
+  const fixture = await createFixture({
+    settings: {
+      policy: "losslessly-projected",
+      source: "settings/sample.yml",
+      adapter: "sample",
+    },
+  });
+  await mkdir(join(fixture.vault, "settings"));
+  await writeFile(join(fixture.vault, "settings", "sample.yml"), "value: 1\n");
+  const adapter: SettingsAdapter = {
+    supports: () => false,
+    async project() {
+      assert.fail("an incompatible adapter must not project settings");
+    },
+  };
+  await assert.rejects(
+    applyProfile(
+      { vault: fixture.vault, profile: fixture.profile },
+      {
+        bundles: new StaticProvider(fixture.bundle),
+        installer: new CopyingInstaller(),
+        settingsAdapters: { sample: adapter },
+      },
+    ),
+    ProfileError,
   );
 });
 
@@ -545,6 +636,7 @@ interface FixtureOptions {
   readonly mainDigest?: string;
   readonly bundle?: PluginRecord["bundle"];
   readonly settings?: PluginRecord["settings"];
+  readonly mutableJsonFiles?: readonly string[];
 }
 
 async function createFixture(options: FixtureOptions = {}): Promise<{
@@ -578,6 +670,9 @@ async function createFixture(options: FixtureOptions = {}): Promise<{
           "manifest.json": digest(manifest),
           "main.js": options.mainDigest ?? digest(main),
         },
+        ...(options.mutableJsonFiles === undefined
+          ? {}
+          : { mutable_json_files: options.mutableJsonFiles }),
         settings: options.settings ?? { policy: "native-portable" },
       },
     ],

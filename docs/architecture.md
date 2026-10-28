@@ -2,12 +2,14 @@
 
 This note assigns each part of the materializer to one module layer. The package turns one canonical profile into verified native state.
 
-| Layer | Responsibility |
-| --- | --- |
-| domain | validates profiles and local overrides; defines the accepted bundle and settings records |
-| application | prepares the declared profile; compares file digests; reconciles installed state; checks receipts |
-| ports | defines bundle, installer, settings and replacement interfaces |
-| infrastructure | adapts `obsidian-launcher` and future authenticated or artifact providers |
+| Layer          | Responsibility                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------------- |
+| domain         | validates profiles and local overrides; defines the accepted bundle and settings records          |
+| application    | prepares the declared profile; compares file digests; reconciles installed state; checks receipts |
+| ports          | defines bundle, installer, settings and replacement interfaces                                    |
+| infrastructure | adapts `obsidian-launcher` and future authenticated or artifact providers                         |
+
+Plugin-specific settings adapters also belong to the infrastructure layer. Each adapter owns one versioned projection from portable consumer data to a complete native settings file. The Full Calendar source records the selected display time zone and excludes credentials and transient runtime state. The adapter writes neutral native values for those excluded fields.
 
 The application layer receives every external collaborator through a port. Therefore, local inputs suffice to validate and reconcile a profile. Providers contain the network code, and an installer port contains the concrete launcher.
 
@@ -17,7 +19,7 @@ The apply operation proceeds through one ordered route:
 2. acquire the vault lock and recover an interrupted change;
 3. obtain every selected bundle and verify its declared files;
 4. install prepared local bundles into a staging vault;
-5. reconcile enabled identifiers, plugin directories, runtime files and governed settings;
+5. reconcile enabled identifiers, plugin directories, release files, declared mutable JSON files and governed settings;
 6. verify the staged state;
 7. record the preceding state on disk and replace the managed native state;
 8. verify the resulting state, retain its receipt, and delete the recovery record;
@@ -39,3 +41,5 @@ The check route uses the same authority boundary:
 6. compare local installs with the override path, Git state, and recorded bytes;
 7. report changes to governed configuration;
 8. release the vault lock.
+
+Release files and mutable plugin state remain separate. Release files have canonical digests. A declared mutable JSON file may change after installation, but it must remain valid JSON at its exact lowercase root-level path. Undeclared files, directories, symbolic links and other mutable file types fail verification.

@@ -124,6 +124,40 @@ test("rejects identifiers and settings paths that can escape their roots", () =>
   }
 });
 
+test("accepts only sorted, unique, unreserved mutable JSON file names", () => {
+  const base = {
+    id: "sample-plugin",
+    repository: "https://github.com/example/sample-plugin",
+    requirement: "required",
+    enabled: true,
+    bundle: { kind: "release", tag: "1.0.0" },
+    files: { "manifest.json": digest, "main.js": digest },
+    settings: { policy: "machine-local" },
+  };
+  for (const mutable_json_files of [
+    ["second.json", "first.json"],
+    ["state.json", "state.json"],
+    ["data.json"],
+    ["nested/state.json"],
+    ["payload.js"],
+    ["State.json"],
+  ]) {
+    assert.throws(
+      () =>
+        parseProfile({
+          format_version: 1,
+          runtime: {
+            minimum_obsidian: "1.0.0",
+            checked_obsidian: "1.14.5",
+            checked_installer: "1.14.5",
+          },
+          plugins: [{ ...base, mutable_json_files }],
+        }),
+      ProfileError,
+    );
+  }
+});
+
 test("rejects an override absent from the canonical profile", () => {
   const profile = parseProfile({
     format_version: 1,
