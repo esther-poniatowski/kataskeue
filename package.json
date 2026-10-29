@@ -25,6 +25,7 @@
   ],
   "scripts": {
     "build": "tsx scripts/write-schema.ts --check && tsc --noEmit && tsup src/index.ts src/cli.ts --format esm --dts",
+    "prepare": "tsup src/index.ts src/cli.ts --format esm --dts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/**/*.test.ts",
     "format": "prettier --write src tests scripts package.json tsconfig.json",
