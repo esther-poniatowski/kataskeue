@@ -142,9 +142,7 @@ async function applyProfileLocked(
   await recoverIncompleteTransaction(vault);
 
   const targetObsidian = join(vault, ".obsidian");
-  const transactionRoot = await mkdtemp(
-    join(vault, ".obsidian-plugin-materializer-"),
-  );
+  const transactionRoot = await mkdtemp(join(vault, ".kataskeue-"));
   const stageVault = join(transactionRoot, "vault");
   const stagedObsidian = join(stageVault, ".obsidian");
   const downloadRoot = join(transactionRoot, "bundles");
@@ -744,9 +742,7 @@ async function projectSettingsDigest(
   source: string,
   consumerRoot: string,
 ): Promise<string> {
-  const temporary = await mkdtemp(
-    join(tmpdir(), "obsidian-plugin-materializer-settings-"),
-  );
+  const temporary = await mkdtemp(join(tmpdir(), "kataskeue-settings-"));
   try {
     const destination = join(temporary, "data.json");
     await adapter.project(source, destination, { consumerRoot });

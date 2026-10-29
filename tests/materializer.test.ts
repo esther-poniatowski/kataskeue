@@ -212,7 +212,7 @@ test("validates plugin identifiers at the exported apply boundary", async () => 
 
 test("rejects a second command while the vault lock is live", async () => {
   const fixture = await createFixture();
-  const lock = join(fixture.vault, ".obsidian-plugin-materializer.lock");
+  const lock = join(fixture.vault, ".kataskeue.lock");
   await writeFile(
     lock,
     `${JSON.stringify({ pid: process.pid, token: "active" })}\n`,
@@ -232,7 +232,7 @@ test("rejects a second command while the vault lock is live", async () => {
 
 test("does not reclaim a stale vault lock implicitly", async () => {
   const fixture = await createFixture();
-  const lock = join(fixture.vault, ".obsidian-plugin-materializer.lock");
+  const lock = join(fixture.vault, ".kataskeue.lock");
   await writeFile(
     lock,
     `${JSON.stringify({ pid: 2_147_483_647, token: "stale" })}\n`,
@@ -283,10 +283,7 @@ test("rolls back a replacement failure", async () => {
 
 test("recovers a durable journal after process interruption", async () => {
   const fixture = await createFixture();
-  const transaction = join(
-    fixture.vault,
-    ".obsidian-plugin-materializer-crash",
-  );
+  const transaction = join(fixture.vault, ".kataskeue-crash");
   const backup = join(transaction, "backup");
   await mkdir(backup, { recursive: true });
   for (const name of [
@@ -306,7 +303,7 @@ test("recovers a durable journal after process interruption", async () => {
     "{}\n",
   );
   await writeFile(
-    join(fixture.vault, ".obsidian-plugin-materializer-transaction.json"),
+    join(fixture.vault, ".kataskeue-transaction.json"),
     `${JSON.stringify({
       format_version: 1,
       transaction_root: transaction,

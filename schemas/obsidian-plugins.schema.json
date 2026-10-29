@@ -1,5 +1,5 @@
 {
-  "$id": "https://github.com/esther-poniatowski/obsidian-plugin-materializer/schemas/obsidian-plugins.schema.json",
+  "$id": "https://github.com/esther-poniatowski/kataskeue/schemas/obsidian-plugins.schema.json",
   "title": "Obsidian plugin profile",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",

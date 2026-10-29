@@ -23,7 +23,7 @@ if (plugins !== undefined && typeof plugins === "object") {
 }
 const output = `${JSON.stringify(
   {
-    $id: "https://github.com/esther-poniatowski/obsidian-plugin-materializer/schemas/obsidian-plugins.schema.json",
+    $id: "https://github.com/esther-poniatowski/kataskeue/schemas/obsidian-plugins.schema.json",
     title: "Obsidian plugin profile",
     ...schema,
   },

@@ -148,9 +148,7 @@ function validateJournal(vault: string, journal: TransactionJournal): void {
     transactionRelative.startsWith("..") ||
     isAbsolute(transactionRelative) ||
     dirname(journal.transaction_root) !== vault ||
-    !basename(journal.transaction_root).startsWith(
-      ".obsidian-plugin-materializer-",
-    ) ||
+    !basename(journal.transaction_root).startsWith(".kataskeue-") ||
     journal.target_obsidian !== join(vault, ".obsidian")
   ) {
     throw new ReplacementError(
@@ -176,7 +174,7 @@ async function writeJournal(
 }
 
 function journalLocation(vault: string): string {
-  return join(vault, ".obsidian-plugin-materializer-transaction.json");
+  return join(vault, ".kataskeue-transaction.json");
 }
 
 async function exists(path: string): Promise<boolean> {

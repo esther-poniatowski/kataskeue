@@ -26,7 +26,7 @@ async function main(argv: readonly string[]): Promise<void> {
   const [command, ...commandArguments] = argv;
   if (command !== "apply" && command !== "check") {
     throw new Error(
-      "usage: obsidian-plugin-materializer <apply|check> --vault PATH --record PATH",
+      "usage: kataskeue <apply|check> --vault PATH --record PATH",
     );
   }
   const { values } = parseArgs({

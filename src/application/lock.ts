@@ -14,7 +14,7 @@ export async function withVaultLock<T>(
   vault: string,
   task: () => Promise<T>,
 ): Promise<T> {
-  const path = join(vault, ".obsidian-plugin-materializer.lock");
+  const path = join(vault, ".kataskeue.lock");
   const owner: LockOwner = { pid: process.pid, token: randomUUID() };
   await acquire(path, owner);
   try {

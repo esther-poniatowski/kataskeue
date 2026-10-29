@@ -1,6 +1,6 @@
-# obsidian-plugin-materializer
+# Kataskeue
 
-Obsidian Plugin Materializer reads one canonical profile. The materializer makes the community-plugin state of an Obsidian vault match that profile.
+Kataskeue reads one canonical profile. The materializer makes the community-plugin state of an Obsidian vault match that profile.
 
 ## Overview
 
@@ -17,7 +17,7 @@ pnpm install --frozen-lockfile
 pnpm build
 ```
 
-The examples below call the executable by its installed name. From the source checkout, replace `obsidian-plugin-materializer` with `node dist/cli.js`. Before running `apply`, close the target vault in Obsidian.
+The examples below call the executable by its installed name. From the source checkout, replace `kataskeue` with `node dist/cli.js`. Before running `apply`, close the target vault in Obsidian.
 
 ## Profile
 
@@ -82,13 +82,13 @@ The [settings-adapter guide](docs/settings-adapters.md) defines the required key
 The `apply` command builds and verifies a candidate before it changes the target vault:
 
 ```sh
-obsidian-plugin-materializer apply --vault PATH --record PATH/obsidian-plugins.yml
+kataskeue apply --vault PATH --record PATH/obsidian-plugins.yml
 ```
 
 The `check` command compares the current native state with the canonical profile and installation receipt:
 
 ```sh
-obsidian-plugin-materializer check --vault PATH --record PATH/obsidian-plugins.yml
+kataskeue check --vault PATH --record PATH/obsidian-plugins.yml
 ```
 
 An untracked override file may select a local build. The selected plugin must also occur in the profile.
@@ -101,7 +101,7 @@ sample-plugin:
 Relative override paths resolve from the directory containing the canonical record. The `source` paths used by `project-owned` and `losslessly-projected` settings follow the same rule.
 
 ```sh
-obsidian-plugin-materializer apply \
+kataskeue apply \
   --vault PATH \
   --record PATH/obsidian-plugins.yml \
   --local-override PATH/obsidian-plugins.local.yml
@@ -119,7 +119,7 @@ sieve:
 Local settings paths use the canonical record directory as their root. Source paths use the same root. The following command selects the local record:
 
 ```sh
-obsidian-plugin-materializer apply \
+kataskeue apply \
   --vault PATH \
   --record PATH/obsidian-plugins.yml \
   --local-settings PATH/obsidian-plugin-settings.local.yml
@@ -127,7 +127,7 @@ obsidian-plugin-materializer apply \
 
 Pass the same local-settings record to `check`. The materializer reads exactly one source. A local source replaces the canonical source in full. The delivery flag `--delivery` rejects local builds and local settings sources.
 
-Each command holds `.obsidian-plugin-materializer.lock` for the complete check or change. A normal exit removes the lock. After an abnormal process exit, confirm that no materializer command is running before removing this file manually.
+Each command holds `.kataskeue.lock` for the complete check or change. A normal exit removes the lock. After an abnormal process exit, confirm that no materializer command is running before removing this file manually.
 
 ## Source support
 

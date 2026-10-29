@@ -1,5 +1,5 @@
 {
-  "name": "obsidian-plugin-materializer",
+  "name": "kataskeue",
   "version": "0.1.0",
   "private": true,
   "description": "Materializes and verifies exact Obsidian community-plugin profiles.",
@@ -11,7 +11,7 @@
     "node": ">=22.14.0"
   },
   "bin": {
-    "obsidian-plugin-materializer": "./dist/cli.js"
+    "kataskeue": "./dist/cli.js"
   },
   "exports": {
     ".": {
