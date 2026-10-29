@@ -19,6 +19,22 @@ pnpm build
 
 The examples below call the executable by its installed name. From the source checkout, replace `kataskeue` with `node dist/cli.js`. Before running `apply`, close the target vault in Obsidian.
 
+## Run at a pinned commit
+
+A consumer can run Kataskeue at an exact commit without a checkout. The command below lets npm perform three steps:
+
+1. fetch the commit;
+2. build `dist/` through the `prepare` script;
+3. run the executable.
+
+```sh
+npx --yes npm@12.2.1 exec --yes --allow-git=root \
+  --package=github:esther-poniatowski/kataskeue#<commit> \
+  -- kataskeue check --vault PATH --record PATH/obsidian-plugins.yml
+```
+
+The command pins npm 12.2.1 for two reasons. npm 10 cannot build a Git package with a `prepare` script during `exec`. npm 12 refuses Git sources by default. The option `--allow-git=root` admits only the named package.
+
 ## Profile
 
 The [generated schema](schemas/obsidian-plugins.schema.json) defines the record structure. The executable parser additionally requires unique, sorted plugin identifiers. This minimal profile selects one required public release:
