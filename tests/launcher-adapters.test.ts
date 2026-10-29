@@ -1,4 +1,16 @@
 import assert from "node:assert/strict";
+import {
+  link,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import { parseProfile } from "../src/domain/profile.js";
@@ -96,4 +108,35 @@ test("passes prepared local bundles to the launcher installer", async () => {
     vault: "/vault",
     plugins: [{ path: "/bundle", enabled: true }],
   });
+});
+
+test("installs private copies of bundle files linked from the cache", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kataskeue-detach-"));
+  try {
+    const cached = join(root, "cache", "main.js");
+    const linkedTarget = join(root, "cache", "styles.css");
+    await mkdir(join(root, "cache"), { recursive: true });
+    await writeFile(cached, "cached bundle\n");
+    await writeFile(linkedTarget, "cached style\n");
+    const vault = join(root, "vault");
+    const installed = join(vault, ".obsidian", "plugins", "sample");
+    const installer = new ObsidianLauncherInstaller({
+      async installPlugins() {
+        await mkdir(installed, { recursive: true });
+        await link(cached, join(installed, "main.js"));
+        await symlink(linkedTarget, join(installed, "styles.css"));
+      },
+    });
+
+    await installer.install(vault, [{ path: "/bundle", enabled: true }]);
+
+    const main = join(installed, "main.js");
+    assert.equal((await lstat(main)).nlink, 1);
+    assert.equal(await readFile(main, "utf8"), "cached bundle\n");
+    assert.ok((await lstat(join(installed, "styles.css"))).isSymbolicLink());
+    await writeFile(main, "edited in the vault\n");
+    assert.equal(await readFile(cached, "utf8"), "cached bundle\n");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

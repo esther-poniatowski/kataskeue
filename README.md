@@ -129,6 +129,25 @@ Pass the same local-settings record to `check`. The materializer reads exactly o
 
 Each command holds `.kataskeue.lock` for the complete check or change. A normal exit removes the lock. After an abnormal process exit, confirm that no materializer command is running before removing this file manually.
 
+## Recovery from drift
+
+`check` reports drift when an installed runtime file no longer matches its declared digest. Each installed file is a private copy, so the drift stays within the vault. Run `apply` again: it restores the file from the verified bundle.
+
+`apply` refuses to install a bundle that no longer matches its declared digest, and reports:
+
+```text
+dataview/main.js digest differs: expected <declared>; found <actual>
+```
+
+In that case, the launcher cache holds a damaged copy of the release. Earlier releases of Kataskeue linked installed files into that cache. Therefore, an edit inside a vault could damage the cached copy. To recover, delete the cached release. Then, run `apply` again to download the release afresh:
+
+```sh
+rm -rf "${OBSIDIAN_CACHE:-$HOME/.obsidian-cache}/obsidian-plugins/<owner>/<repository>/<tag>"
+kataskeue apply --vault PATH --record PATH/obsidian-plugins.yml
+```
+
+A vault materialized before the private copies may still share files with the cache. Run `apply` once to replace them by private copies.
+
 ## Source support
 
 Remote releases and retained artifacts enter through a provider. Local builds enter through the separate override record. The available routes have the following status:
