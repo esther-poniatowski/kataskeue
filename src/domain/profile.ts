@@ -18,7 +18,7 @@ const reservedPluginFileNames = new Set([
 export const sha256Schema = z.string().regex(/^[0-9a-f]{64}$/);
 export const commitSchema = z.string().regex(/^[0-9a-f]{40}$/);
 export const pluginIdSchema = z.string().regex(/^[a-z0-9][a-z0-9._-]*$/);
-const relativePathSchema = z
+export const relativePathSchema = z
   .string()
   .min(1)
   .regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))(?!.*\\).+$/);

@@ -13,6 +13,7 @@ import { DriftError } from "../errors.js";
 const receiptSettingsSchema = z
   .object({
     adapter: z.string().min(1),
+    source_mode: z.enum(["canonical", "local"]),
     source_sha256: sha256Schema,
     native_sha256: sha256Schema,
   })
@@ -63,7 +64,7 @@ const omittedPluginSchema = z
 
 export const installationReceiptSchema = z
   .object({
-    format_version: z.literal(1),
+    format_version: z.literal(2),
     profile_digest: sha256Schema,
     runtime: runtimeSchema,
     plugins: z.array(receiptPluginSchema),

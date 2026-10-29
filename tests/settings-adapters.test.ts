@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -7,6 +7,7 @@ import test from "node:test";
 import { ProfileError } from "../src/errors.js";
 import { EkphrasisSettingsAdapter } from "../src/infrastructure/settings/ekphrasisSettingsAdapter.js";
 import { FullCalendarRemasteredSettingsAdapter } from "../src/infrastructure/settings/fullCalendarRemasteredSettingsAdapter.js";
+import { SieveSettingsAdapter } from "../src/infrastructure/settings/sieveSettingsAdapter.js";
 
 test("projects the complete Ekphrasis native settings", async () => {
   const root = await mkdtemp(join(tmpdir(), "ekphrasis-settings-"));
@@ -201,3 +202,208 @@ test("rejects an invalid Full Calendar display time zone", async () => {
     ProfileError,
   );
 });
+
+test("projects exact Sieve rules for unselected project directories", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sieve-settings-"));
+  await writeProject(root, "selected-directory", "selected-project");
+  await writeProject(root, "unselected-directory", "unselected-project");
+  await mkdir(join(root, "projects", "_audits"), { recursive: true });
+  await writeFile(join(root, "projects", "TODO.md"), "# Tasks\n");
+  const source = join(root, "sieve.yml");
+  const destination = join(root, "data.json");
+  await writeFile(
+    source,
+    [
+      "format_version: 1",
+      "projects_root: projects",
+      "specification_file: project.yml",
+      "selected_project_ids:",
+      "  - selected-project",
+      "",
+    ].join("\n"),
+  );
+
+  await new SieveSettingsAdapter().project(source, destination, {
+    consumerRoot: root,
+  });
+  assert.deepEqual(JSON.parse(await readFile(destination, "utf8")), {
+    schemaVersion: 1,
+    rules: "/projects/unselected-directory\n",
+    displayName: "",
+  });
+});
+
+test("projects empty Sieve rules when every project is selected", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sieve-settings-"));
+  await writeProject(root, "selected-directory", "selected-project");
+  const source = join(root, "sieve.yml");
+  const destination = join(root, "data.json");
+  await writeFile(
+    source,
+    [
+      "format_version: 1",
+      "projects_root: projects",
+      "specification_file: project.yml",
+      "selected_project_ids:",
+      "  - selected-project",
+      "",
+    ].join("\n"),
+  );
+
+  await new SieveSettingsAdapter().project(source, destination, {
+    consumerRoot: root,
+  });
+  assert.equal(
+    (JSON.parse(await readFile(destination, "utf8")) as { rules: string })
+      .rules,
+    "",
+  );
+});
+
+test("rejects duplicate Sieve project identifiers", async () => {
+  const root = await mkdtemp(join(tmpdir(), "invalid-sieve-settings-"));
+  await writeProject(root, "first", "duplicate-project");
+  await writeProject(root, "second", "duplicate-project");
+  const source = join(root, "sieve.yml");
+  const destination = join(root, "data.json");
+  await writeFile(
+    source,
+    [
+      "format_version: 1",
+      "projects_root: projects",
+      "specification_file: project.yml",
+      "selected_project_ids:",
+      "  - absent-project",
+      "",
+    ].join("\n"),
+  );
+  await assert.rejects(
+    new SieveSettingsAdapter().project(source, destination, {
+      consumerRoot: root,
+    }),
+    ProfileError,
+  );
+});
+
+test("rejects a selected identifier absent from the project inventory", async () => {
+  const root = await mkdtemp(join(tmpdir(), "invalid-sieve-settings-"));
+  await writeProject(root, "present", "present-project");
+  const source = join(root, "sieve.yml");
+  const destination = join(root, "data.json");
+  await writeFile(
+    source,
+    [
+      "format_version: 1",
+      "projects_root: projects",
+      "specification_file: project.yml",
+      "selected_project_ids:",
+      "  - absent-project",
+      "",
+    ].join("\n"),
+  );
+  await assert.rejects(
+    new SieveSettingsAdapter().project(source, destination, {
+      consumerRoot: root,
+    }),
+    ProfileError,
+  );
+});
+
+test("rejects duplicate and unsorted selected project identifiers", async () => {
+  const root = await mkdtemp(join(tmpdir(), "invalid-sieve-settings-"));
+  await writeProject(root, "alpha", "alpha-project");
+  await writeProject(root, "beta", "beta-project");
+  const source = join(root, "sieve.yml");
+  const destination = join(root, "data.json");
+  for (const identifiers of [
+    ["alpha-project", "alpha-project"],
+    ["beta-project", "alpha-project"],
+  ]) {
+    await writeFile(
+      source,
+      [
+        "format_version: 1",
+        "projects_root: projects",
+        "specification_file: project.yml",
+        "selected_project_ids:",
+        ...identifiers.map((id) => `  - ${id}`),
+        "",
+      ].join("\n"),
+    );
+    await assert.rejects(
+      new SieveSettingsAdapter().project(source, destination, {
+        consumerRoot: root,
+      }),
+      ProfileError,
+    );
+  }
+});
+
+test("rejects unsafe project directories and malformed specifications", async () => {
+  for (const [directory, contents] of [
+    ["unsafe[project]", "identity:\n  id: unsafe-project\n"],
+    ["malformed-project", "scope: {}\n"],
+  ] as const) {
+    const root = await mkdtemp(join(tmpdir(), "invalid-sieve-settings-"));
+    const project = join(root, "projects", directory);
+    await mkdir(project, { recursive: true });
+    await writeFile(join(project, "project.yml"), contents);
+    const source = join(root, "sieve.yml");
+    const destination = join(root, "data.json");
+    await writeFile(
+      source,
+      [
+        "format_version: 1",
+        "projects_root: projects",
+        "specification_file: project.yml",
+        "selected_project_ids: []",
+        "",
+      ].join("\n"),
+    );
+    await assert.rejects(
+      new SieveSettingsAdapter().project(source, destination, {
+        consumerRoot: root,
+      }),
+      ProfileError,
+    );
+  }
+});
+
+test("supports only the declared Sieve release", () => {
+  const adapter = new SieveSettingsAdapter();
+  const base = {
+    id: "sieve",
+    repository: "https://github.com/example/sieve",
+    requirement: "required" as const,
+    enabled: true,
+    files: {
+      "manifest.json": "a".repeat(64),
+      "main.js": "b".repeat(64),
+    },
+    settings: { policy: "machine-local" as const },
+  };
+  assert.equal(
+    adapter.supports({
+      ...base,
+      bundle: { kind: "release", tag: "1.0.2" },
+    }),
+    true,
+  );
+  assert.equal(
+    adapter.supports({
+      ...base,
+      bundle: { kind: "release", tag: "1.0.3" },
+    }),
+    false,
+  );
+});
+
+async function writeProject(
+  root: string,
+  directory: string,
+  id: string,
+): Promise<void> {
+  const project = join(root, "projects", directory);
+  await mkdir(project, { recursive: true });
+  await writeFile(join(project, "project.yml"), `identity:\n  id: ${id}\n`);
+}

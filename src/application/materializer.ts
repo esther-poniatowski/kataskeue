@@ -14,6 +14,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { tmpdir } from "node:os";
 
 import { sha256 } from "../domain/digests.js";
 import {
@@ -25,6 +26,10 @@ import {
   type RuntimeFileName,
   type RuntimeFiles,
 } from "../domain/profile.js";
+import {
+  parseLocalSettingsSources,
+  type LocalSettingsSources,
+} from "../domain/localSettingsSources.js";
 import {
   BundleNotFoundError,
   DigestMismatchError,
@@ -67,6 +72,7 @@ export interface ApplyOptions {
   readonly root?: string;
   readonly profile: PluginProfile;
   readonly localOverrides?: LocalOverrides;
+  readonly localSettingsSources?: LocalSettingsSources;
   readonly delivery?: boolean;
 }
 
@@ -75,6 +81,13 @@ export interface CheckOptions {
   readonly root?: string;
   readonly profile: PluginProfile;
   readonly localOverrides?: LocalOverrides;
+  readonly localSettingsSources?: LocalSettingsSources;
+  readonly delivery?: boolean;
+}
+
+interface SelectedSettingsSource {
+  readonly path: string;
+  readonly mode: "canonical" | "local";
 }
 
 interface PreparedPlugin {
@@ -95,9 +108,24 @@ export async function applyProfile(
     options.localOverrides ?? {},
     profile,
   );
+  const localSettingsSources = parseLocalSettingsSources(
+    options.localSettingsSources ?? {},
+    profile,
+  );
+  rejectLocalSourcesInDelivery(
+    options.delivery,
+    localOverrides,
+    localSettingsSources,
+  );
   return withVaultLock(vault, () =>
     applyProfileLocked(
-      { ...options, vault, profile, localOverrides },
+      {
+        ...options,
+        vault,
+        profile,
+        localOverrides,
+        localSettingsSources,
+      },
       dependencies,
     ),
   );
@@ -110,10 +138,8 @@ async function applyProfileLocked(
   const vault = resolve(options.vault);
   const root = resolve(options.root ?? vault);
   const overrides = options.localOverrides ?? {};
+  const localSettingsSources = options.localSettingsSources ?? {};
   await recoverIncompleteTransaction(vault);
-  if (options.delivery && Object.keys(overrides).length > 0) {
-    throw new ProfileError("delivery mode rejects local overrides");
-  }
 
   const targetObsidian = join(vault, ".obsidian");
   const transactionRoot = await mkdtemp(
@@ -185,8 +211,10 @@ async function applyProfileLocked(
       stagedObsidian,
       targetObsidian,
       root,
+      vault,
       prepared,
       dependencies.settingsAdapters ?? {},
+      localSettingsSources,
     );
 
     const receiptPlugins: ReceiptPlugin[] = [];
@@ -200,6 +228,7 @@ async function applyProfileLocked(
         plugin.record,
         root,
         installed,
+        localSettingsSources,
       );
       receiptPlugins.push({
         id: plugin.record.id,
@@ -213,7 +242,7 @@ async function applyProfileLocked(
     }
 
     const receipt: InstallationReceipt = {
-      format_version: 1,
+      format_version: 2,
       profile_digest: profileDigest(options.profile),
       runtime: options.profile.runtime,
       plugins: receiptPlugins,
@@ -226,10 +255,13 @@ async function applyProfileLocked(
     await verifyNativeState(
       stagedObsidian,
       root,
+      vault,
       options.profile,
       receipt,
       overrides,
       dependencies.overrideInspector,
+      dependencies.settingsAdapters ?? {},
+      localSettingsSources,
     );
 
     const activeTransaction = await replaceManagedState(
@@ -243,10 +275,13 @@ async function applyProfileLocked(
       await verifyNativeState(
         targetObsidian,
         root,
+        vault,
         options.profile,
         receipt,
         overrides,
         dependencies.overrideInspector,
+        dependencies.settingsAdapters ?? {},
+        localSettingsSources,
       );
     } catch (error) {
       await activeTransaction.rollback();
@@ -266,7 +301,10 @@ async function applyProfileLocked(
 /** Verify native state against the canonical profile and an optional local override record. */
 export async function checkProfile(
   options: CheckOptions,
-  dependencies: Pick<MaterializerDependencies, "overrideInspector"> = {},
+  dependencies: Pick<
+    MaterializerDependencies,
+    "overrideInspector" | "settingsAdapters"
+  > = {},
 ): Promise<InstallationReceipt> {
   const vault = resolve(options.vault);
   const profile = parseProfile(options.profile);
@@ -274,9 +312,24 @@ export async function checkProfile(
     options.localOverrides ?? {},
     profile,
   );
+  const localSettingsSources = parseLocalSettingsSources(
+    options.localSettingsSources ?? {},
+    profile,
+  );
+  rejectLocalSourcesInDelivery(
+    options.delivery,
+    localOverrides,
+    localSettingsSources,
+  );
   return withVaultLock(vault, () =>
     checkProfileLocked(
-      { ...options, vault, profile, localOverrides },
+      {
+        ...options,
+        vault,
+        profile,
+        localOverrides,
+        localSettingsSources,
+      },
       dependencies,
     ),
   );
@@ -284,7 +337,10 @@ export async function checkProfile(
 
 async function checkProfileLocked(
   options: CheckOptions,
-  dependencies: Pick<MaterializerDependencies, "overrideInspector">,
+  dependencies: Pick<
+    MaterializerDependencies,
+    "overrideInspector" | "settingsAdapters"
+  >,
 ): Promise<InstallationReceipt> {
   const vault = resolve(options.vault);
   const root = resolve(options.root ?? vault);
@@ -303,10 +359,13 @@ async function checkProfileLocked(
   await verifyNativeState(
     obsidian,
     root,
+    vault,
     options.profile,
     receipt,
     options.localOverrides ?? {},
     dependencies.overrideInspector,
+    dependencies.settingsAdapters ?? {},
+    options.localSettingsSources ?? {},
   );
   return receipt;
 }
@@ -315,8 +374,10 @@ async function reconcileStage(
   stagedObsidian: string,
   targetObsidian: string,
   root: string,
+  consumerRoot: string,
   prepared: readonly PreparedPlugin[],
   adapters: Readonly<Record<string, SettingsAdapter>>,
+  localSettingsSources: LocalSettingsSources,
 ): Promise<void> {
   const pluginsRoot = join(stagedObsidian, "plugins");
   await mkdir(pluginsRoot, { recursive: true });
@@ -342,8 +403,10 @@ async function reconcileStage(
       plugin.record,
       targetObsidian,
       root,
+      consumerRoot,
       pluginRoot,
       adapters,
+      localSettingsSources,
     );
     const allowed = allowedPluginFiles(plugin.record);
     for (const entry of await safeReadDirectory(pluginRoot)) {
@@ -366,8 +429,10 @@ async function reconcileSettings(
   plugin: PluginRecord,
   targetObsidian: string,
   root: string,
+  consumerRoot: string,
   stagedPlugin: string,
   adapters: Readonly<Record<string, SettingsAdapter>>,
+  localSettingsSources: LocalSettingsSources,
 ): Promise<void> {
   const destination = join(stagedPlugin, "data.json");
   if (plugin.settings.policy === "project-owned") {
@@ -380,23 +445,13 @@ async function reconcileSettings(
     return;
   }
   if (plugin.settings.policy === "losslessly-projected") {
-    const adapter = adapters[plugin.settings.adapter];
-    if (adapter === undefined) {
-      throw new ProfileError(
-        `settings adapter ${plugin.settings.adapter} is unavailable for ${plugin.id}`,
-      );
-    }
-    if (!adapter.supports(plugin)) {
-      throw new ProfileError(
-        `settings adapter ${plugin.settings.adapter} does not support ${plugin.id} at the selected bundle`,
-      );
-    }
-    const source = await resolveSourceFile(
+    const adapter = requireSettingsAdapter(plugin, adapters);
+    const source = await selectSettingsSource(
+      plugin,
       root,
-      plugin.settings.source,
-      `${plugin.id} settings source`,
+      localSettingsSources,
     );
-    await adapter.project(source, destination);
+    await adapter.project(source.path, destination, { consumerRoot });
     await requireFile(destination, `${plugin.id} projected settings`);
     return;
   }
@@ -411,10 +466,13 @@ async function reconcileSettings(
 async function verifyNativeState(
   obsidian: string,
   root: string,
+  consumerRoot: string,
   profile: PluginProfile,
   receipt: InstallationReceipt,
   overrides: LocalOverrides,
   overrideInspector?: OverrideInspector,
+  settingsAdapters: Readonly<Record<string, SettingsAdapter>> = {},
+  localSettingsSources: LocalSettingsSources = {},
 ): Promise<void> {
   if (JSON.stringify(receipt.runtime) !== JSON.stringify(profile.runtime)) {
     throw new DriftError(
@@ -534,7 +592,15 @@ async function verifyNativeState(
       );
     }
     await verifyMutableJsonFiles(plugin, pluginRoot);
-    await verifySettings(plugin, root, pluginRoot, receiptPlugin.settings);
+    await verifySettings(
+      plugin,
+      root,
+      consumerRoot,
+      pluginRoot,
+      receiptPlugin.settings,
+      settingsAdapters,
+      localSettingsSources,
+    );
   }
 }
 
@@ -562,8 +628,11 @@ function validateOmissions(
 async function verifySettings(
   plugin: PluginRecord,
   root: string,
+  consumerRoot: string,
   pluginRoot: string,
   receipt: ReceiptSettings | undefined,
+  adapters: Readonly<Record<string, SettingsAdapter>>,
+  localSettingsSources: LocalSettingsSources,
 ): Promise<void> {
   const native = join(pluginRoot, "data.json");
   if (plugin.settings.policy === "project-owned") {
@@ -580,16 +649,25 @@ async function verifySettings(
     return;
   }
   if (plugin.settings.policy === "losslessly-projected") {
-    const source = await resolveSourceFile(
+    const source = await selectSettingsSource(
+      plugin,
       root,
-      plugin.settings.source,
-      `${plugin.id} settings source`,
+      localSettingsSources,
+    );
+    const adapter = requireSettingsAdapter(plugin, adapters);
+    const projectedDigest = await projectSettingsDigest(
+      adapter,
+      plugin,
+      source.path,
+      consumerRoot,
     );
     if (
       receipt === undefined ||
       receipt.adapter !== plugin.settings.adapter ||
-      receipt.source_sha256 !== (await sha256(source)) ||
-      receipt.native_sha256 !== (await sha256(native))
+      receipt.source_mode !== source.mode ||
+      receipt.source_sha256 !== (await sha256(source.path)) ||
+      receipt.native_sha256 !== (await sha256(native)) ||
+      projectedDigest !== receipt.native_sha256
     ) {
       throw new DriftError(`projected settings drifted for ${plugin.id}`);
     }
@@ -604,21 +682,93 @@ async function collectSettingsReceipt(
   plugin: PluginRecord,
   root: string,
   installed: string,
+  localSettingsSources: LocalSettingsSources,
 ): Promise<ReceiptSettings | undefined> {
   if (plugin.settings.policy !== "losslessly-projected") {
     return undefined;
   }
+  const source = await selectSettingsSource(plugin, root, localSettingsSources);
   return {
     adapter: plugin.settings.adapter,
-    source_sha256: await sha256(
-      await resolveSourceFile(
-        root,
-        plugin.settings.source,
-        `${plugin.id} settings source`,
-      ),
-    ),
+    source_mode: source.mode,
+    source_sha256: await sha256(source.path),
     native_sha256: await sha256(join(installed, "data.json")),
   };
+}
+
+function requireSettingsAdapter(
+  plugin: PluginRecord,
+  adapters: Readonly<Record<string, SettingsAdapter>>,
+): SettingsAdapter {
+  if (plugin.settings.policy !== "losslessly-projected") {
+    throw new ProfileError(`${plugin.id} does not use projected settings`);
+  }
+  const adapter = adapters[plugin.settings.adapter];
+  if (adapter === undefined) {
+    throw new ProfileError(
+      `settings adapter ${plugin.settings.adapter} is unavailable for ${plugin.id}`,
+    );
+  }
+  if (!adapter.supports(plugin)) {
+    throw new ProfileError(
+      `settings adapter ${plugin.settings.adapter} does not support ${plugin.id} at the selected bundle`,
+    );
+  }
+  return adapter;
+}
+
+async function selectSettingsSource(
+  plugin: PluginRecord,
+  root: string,
+  localSettingsSources: LocalSettingsSources,
+): Promise<SelectedSettingsSource> {
+  if (plugin.settings.policy !== "losslessly-projected") {
+    throw new ProfileError(`${plugin.id} does not use projected settings`);
+  }
+  const local = localSettingsSources[plugin.id];
+  const mode = local === undefined ? "canonical" : "local";
+  const source = local?.source ?? plugin.settings.source;
+  return {
+    mode,
+    path: await resolveSourceFile(
+      root,
+      source,
+      `${plugin.id} ${mode} settings source`,
+    ),
+  };
+}
+
+async function projectSettingsDigest(
+  adapter: SettingsAdapter,
+  plugin: PluginRecord,
+  source: string,
+  consumerRoot: string,
+): Promise<string> {
+  const temporary = await mkdtemp(
+    join(tmpdir(), "obsidian-plugin-materializer-settings-"),
+  );
+  try {
+    const destination = join(temporary, "data.json");
+    await adapter.project(source, destination, { consumerRoot });
+    await requireFile(destination, `${plugin.id} projected settings`);
+    return await sha256(destination);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+}
+
+function rejectLocalSourcesInDelivery(
+  delivery: boolean | undefined,
+  localOverrides: LocalOverrides,
+  localSettingsSources: LocalSettingsSources,
+): void {
+  if (!delivery) return;
+  if (Object.keys(localOverrides).length > 0) {
+    throw new ProfileError("delivery mode rejects local build overrides");
+  }
+  if (Object.keys(localSettingsSources).length > 0) {
+    throw new ProfileError("delivery mode rejects local settings sources");
+  }
 }
 
 async function verifyBundleIdentity(
@@ -801,7 +951,7 @@ function resolveWithin(root: string, path: string): string {
   const resolved = resolve(root, path);
   const rel = relative(root, resolved);
   if (rel.startsWith("..") || isAbsolute(rel)) {
-    throw new ProfileError(`path leaves the consumer root: ${path}`);
+    throw new ProfileError(`path leaves the settings-source root: ${path}`);
   }
   return resolved;
 }

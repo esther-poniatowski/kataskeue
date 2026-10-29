@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { parseLocalOverrides, parseProfile } from "../src/domain/profile.js";
+import { parseLocalSettingsSources } from "../src/domain/localSettingsSources.js";
 import { ProfileError } from "../src/errors.js";
 
 const digest = "a".repeat(64);
@@ -172,4 +173,57 @@ test("rejects an override absent from the canonical profile", () => {
     () => parseLocalOverrides({ undeclared: { path: "/tmp/plugin" } }, profile),
     ProfileError,
   );
+});
+
+test("accepts local sources only for projected settings", () => {
+  const projected = parseProfile({
+    format_version: 1,
+    runtime: {
+      minimum_obsidian: "1.0.0",
+      checked_obsidian: "1.14.5",
+      checked_installer: "1.14.5",
+    },
+    plugins: [
+      {
+        id: "sample-plugin",
+        repository: "https://github.com/example/sample-plugin",
+        requirement: "required",
+        enabled: true,
+        bundle: { kind: "release", tag: "1.0.0" },
+        files: { "manifest.json": digest, "main.js": digest },
+        settings: {
+          policy: "losslessly-projected",
+          source: "settings/sample.yml",
+          adapter: "sample@1",
+        },
+      },
+    ],
+  });
+  assert.deepEqual(
+    parseLocalSettingsSources(
+      { "sample-plugin": { source: "settings/sample.local.yml" } },
+      projected,
+    ),
+    { "sample-plugin": { source: "settings/sample.local.yml" } },
+  );
+
+  const native = parseProfile({
+    ...projected,
+    plugins: [
+      {
+        ...projected.plugins[0]!,
+        settings: { policy: "native-portable" },
+      },
+    ],
+  });
+  for (const [sources, profile] of [
+    [{ undeclared: { source: "settings/local.yml" } }, projected],
+    [{ "sample-plugin": { source: "settings/sample.local.yml" } }, native],
+    [{ "sample-plugin": { source: "../outside.yml" } }, projected],
+  ] as const) {
+    assert.throws(
+      () => parseLocalSettingsSources(sources, profile),
+      ProfileError,
+    );
+  }
 });

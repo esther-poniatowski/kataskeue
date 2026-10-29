@@ -417,13 +417,13 @@ test("parses receipt versions and verifies canonical source kinds", async () => 
     format_version: number;
     plugins: Array<{ source: string }>;
   };
-  receipt.format_version = 2;
+  receipt.format_version = 1;
   await writeFile(receiptPath, `${JSON.stringify(receipt)}\n`);
   await assert.rejects(
     checkProfile({ vault: fixture.vault, profile: fixture.profile }),
     DriftError,
   );
-  receipt.format_version = 1;
+  receipt.format_version = 2;
   receipt.plugins[0]!.source = "artifact";
   await writeFile(receiptPath, `${JSON.stringify(receipt)}\n`);
   await assert.rejects(
@@ -482,7 +482,7 @@ test("records and verifies losslessly projected settings", async () => {
       );
     },
   };
-  await applyProfile(
+  const receipt = await applyProfile(
     { vault: fixture.vault, profile: fixture.profile },
     {
       bundles: new StaticProvider(fixture.bundle),
@@ -490,9 +490,131 @@ test("records and verifies losslessly projected settings", async () => {
       settingsAdapters: { sample: adapter },
     },
   );
+  assert.equal(receipt.plugins[0]?.settings?.source_mode, "canonical");
   await writeFile(join(fixture.vault, "settings", "sample.yml"), "value: 2\n");
   await assert.rejects(
-    checkProfile({ vault: fixture.vault, profile: fixture.profile }),
+    checkProfile(
+      { vault: fixture.vault, profile: fixture.profile },
+      { settingsAdapters: { sample: adapter } },
+    ),
+    DriftError,
+  );
+});
+
+test("uses complete local settings sources and records their mode", async () => {
+  const fixture = await createFixture({
+    settings: {
+      policy: "losslessly-projected",
+      source: "settings/sample.yml",
+      adapter: "sample",
+    },
+  });
+  await mkdir(join(fixture.vault, "settings"));
+  await writeFile(join(fixture.vault, "settings", "sample.yml"), "value: 1\n");
+  await writeFile(
+    join(fixture.vault, "settings", "sample.local.yml"),
+    "value: 1\n",
+  );
+  const localSettingsSources = {
+    "sample-plugin": { source: "settings/sample.local.yml" },
+  };
+  const adapter: SettingsAdapter = {
+    supports: () => true,
+    async project(source, destination) {
+      await writeFile(destination, await readFile(source, "utf8"));
+    },
+  };
+  const dependencies = {
+    bundles: new StaticProvider(fixture.bundle),
+    installer: new CopyingInstaller(),
+    settingsAdapters: { sample: adapter },
+  };
+  const receipt = await applyProfile(
+    {
+      vault: fixture.vault,
+      profile: fixture.profile,
+      localSettingsSources,
+    },
+    dependencies,
+  );
+  assert.equal(receipt.plugins[0]?.settings?.source_mode, "local");
+  await checkProfile(
+    {
+      vault: fixture.vault,
+      profile: fixture.profile,
+      localSettingsSources,
+    },
+    { settingsAdapters: { sample: adapter } },
+  );
+  await assert.rejects(
+    checkProfile(
+      { vault: fixture.vault, profile: fixture.profile },
+      { settingsAdapters: { sample: adapter } },
+    ),
+    DriftError,
+  );
+  await assert.rejects(
+    checkProfile(
+      {
+        vault: fixture.vault,
+        profile: fixture.profile,
+        localSettingsSources,
+        delivery: true,
+      },
+      { settingsAdapters: { sample: adapter } },
+    ),
+    ProfileError,
+  );
+  await assert.rejects(
+    applyProfile(
+      {
+        vault: fixture.vault,
+        profile: fixture.profile,
+        localSettingsSources,
+        delivery: true,
+      },
+      dependencies,
+    ),
+    ProfileError,
+  );
+});
+
+test("reprojects settings while checking dependent inputs", async () => {
+  const fixture = await createFixture({
+    settings: {
+      policy: "losslessly-projected",
+      source: "settings/sample.yml",
+      adapter: "sample",
+    },
+  });
+  const recordRoot = join(fixture.vault, "config", "obsidian");
+  await mkdir(join(recordRoot, "settings"), { recursive: true });
+  await writeFile(join(recordRoot, "settings", "sample.yml"), "value: 1\n");
+  const inventory = join(fixture.vault, "inventory.txt");
+  await writeFile(inventory, "first\n");
+  const adapter: SettingsAdapter = {
+    supports: () => true,
+    async project(source, destination, context) {
+      await writeFile(
+        destination,
+        `${await readFile(source, "utf8")}${await readFile(join(context.consumerRoot, "inventory.txt"), "utf8")}`,
+      );
+    },
+  };
+  await applyProfile(
+    { vault: fixture.vault, root: recordRoot, profile: fixture.profile },
+    {
+      bundles: new StaticProvider(fixture.bundle),
+      installer: new CopyingInstaller(),
+      settingsAdapters: { sample: adapter },
+    },
+  );
+  await writeFile(inventory, "second\n");
+  await assert.rejects(
+    checkProfile(
+      { vault: fixture.vault, root: recordRoot, profile: fixture.profile },
+      { settingsAdapters: { sample: adapter } },
+    ),
     DriftError,
   );
 });
@@ -542,7 +664,7 @@ test("requires project-owned settings and excludes native data", async () => {
   );
 });
 
-test("rejects a settings symlink whose target leaves the consumer root", async () => {
+test("rejects a settings symlink whose target leaves the settings-source root", async () => {
   const fixture = await createFixture({
     settings: { policy: "project-owned", source: "settings/sample.yml" },
   });

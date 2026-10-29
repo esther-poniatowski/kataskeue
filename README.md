@@ -67,14 +67,15 @@ Each plugin selects one settings policy:
 
 A plugin may also declare root-level `mutable_json_files`. A declared file may be absent. When present, its path must have a lowercase JSON filename, and its content must remain valid JSON. Names must be unique, sorted and distinct from the bundle files, the settings file and the development marker. Other mutable file types and directories are unsupported, and undeclared entries fail reconciliation.
 
-The command-line interface supplies two settings adapters:
+The command-line interface supplies three settings adapters:
 
-| Adapter                           | Source contract                                                  |
-| --------------------------------- | ---------------------------------------------------------------- |
-| `ekphrasis@1`                     | portable schema-registry path, path rules and commit delay       |
-| `full-calendar-remastered@0.13.7` | Tasks calendar, Tasks integration and portable interface choices |
+| Adapter                           | Source contract                                                   |
+| --------------------------------- | ----------------------------------------------------------------- |
+| `ekphrasis@1`                     | portable schema-registry path, path rules and commit delay        |
+| `full-calendar-remastered@0.13.7` | Tasks calendar, Tasks integration and portable interface choices  |
+| `sieve@1.0.2`                     | project inventory structure and selected stable project identifiers |
 
-The [settings-adapter guide](docs/settings-adapters.md) defines the required keys and admitted values of both source files.
+The [settings-adapter guide](docs/settings-adapters.md) defines the required keys and admitted values of these source files.
 
 ## Commands
 
@@ -107,6 +108,24 @@ obsidian-plugin-materializer apply \
 ```
 
 Pass the same override to `check` when checking the local build. The delivery flag `--delivery` rejects every local override.
+
+An untracked local-settings record may replace a complete projected settings source for one plugin. The following record selects a local Sieve source:
+
+```yaml
+sieve:
+  source: config/obsidian/sieve.local.yml
+```
+
+Local settings paths use the canonical record directory as their root. Source paths use the same root. The following command selects the local record:
+
+```sh
+obsidian-plugin-materializer apply \
+  --vault PATH \
+  --record PATH/obsidian-plugins.yml \
+  --local-settings PATH/obsidian-plugin-settings.local.yml
+```
+
+Pass the same local-settings record to `check`. The materializer reads exactly one source. A local source replaces the canonical source in full. The delivery flag `--delivery` rejects local builds and local settings sources.
 
 Each command holds `.obsidian-plugin-materializer.lock` for the complete check or change. A normal exit removes the lock. After an abnormal process exit, confirm that no materializer command is running before removing this file manually.
 

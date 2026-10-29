@@ -1,6 +1,7 @@
 import type { SettingsAdapter } from "../../ports.js";
 import { EkphrasisSettingsAdapter } from "./ekphrasisSettingsAdapter.js";
 import { FullCalendarRemasteredSettingsAdapter } from "./fullCalendarRemasteredSettingsAdapter.js";
+import { SieveSettingsAdapter } from "./sieveSettingsAdapter.js";
 
 /** Returns the versioned settings adapters shipped by the command-line interface. */
 export function createSettingsAdapters(): Readonly<
@@ -10,5 +11,6 @@ export function createSettingsAdapters(): Readonly<
     "ekphrasis@1": new EkphrasisSettingsAdapter(),
     "full-calendar-remastered@0.13.7":
       new FullCalendarRemasteredSettingsAdapter(),
+    "sieve@1.0.2": new SieveSettingsAdapter(),
   };
 }

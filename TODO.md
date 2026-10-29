@@ -12,5 +12,6 @@ These tasks prepare the tool for its first vault.
 - [ ] Fetch private releases through an authenticated provider.
 - [ ] Fetch retained artifacts and verify their archives.
 - [x] Add lossless settings adapters required by the first consumer profiles.
+- [x] Add complete local settings sources and derive Sieve rules from stable project identifiers.
 - [x] Qualify the public-release route against an isolated Obsidian runtime.
 - [ ] Generate and qualify the first consumer profile.

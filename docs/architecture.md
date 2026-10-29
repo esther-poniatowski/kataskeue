@@ -4,18 +4,18 @@ This note assigns each part of the materializer to one module layer. The package
 
 | Layer          | Responsibility                                                                                    |
 | -------------- | ------------------------------------------------------------------------------------------------- |
-| domain         | validates profiles and local overrides; defines the accepted bundle and settings records          |
+| domain         | validates profiles, local build overrides and local settings sources; defines accepted records    |
 | application    | prepares the declared profile; compares file digests; reconciles installed state; checks receipts |
 | ports          | defines bundle, installer, settings and replacement interfaces                                    |
 | infrastructure | adapts `obsidian-launcher` and future authenticated or artifact providers                         |
 
-Plugin-specific settings adapters also belong to the infrastructure layer. Each adapter owns one versioned projection from portable consumer data to a complete native settings file. The Full Calendar source records the selected display time zone and excludes credentials and transient runtime state. The adapter writes neutral native values for those excluded fields.
+Each plugin adapter belongs to the infrastructure layer. The adapter converts its versioned portable source into a complete native file. Its context supplies the consumer vault root when the adapter must inspect declared repository inputs.
 
 The application layer receives every external collaborator through a port. Therefore, local inputs suffice to validate and reconcile a profile. Providers contain the network code, and an installer port contains the concrete launcher.
 
 The apply operation proceeds through one ordered route:
 
-1. validate the canonical profile and any local override;
+1. validate the canonical profile, local build overrides and local settings sources;
 2. acquire the vault lock and recover an interrupted change;
 3. obtain every selected bundle and verify its declared files;
 4. install prepared local bundles into a staging vault;
@@ -29,17 +29,18 @@ The tool never deletes a stale lock automatically. This constraint prevents two 
 
 When a provider confirms a missing bundle, it may omit the corresponding disabled optional plugin. An unsupported provider, a failed login, and another fetch failure leave the bundle status unresolved. Such errors reject the candidate. Required plugins must be present. Differing digests and missing settings adapters also reject the candidate before the vault changes.
 
-The canonical profile determines which plugins must exist. A receipt identifies the selected source and records the installed digests. These fields permit checks of the installed bytes and governed configuration. The receipt cannot remove a required plugin from the expected set.
+The canonical profile determines which plugins must exist. A receipt identifies each bundle source and the canonical or local mode of each projected settings source. The receipt also records the installed digests. These fields permit checks of the installed bytes and governed configuration. The receipt cannot remove a required plugin from the expected set.
 
 The check route uses the same authority boundary:
 
-1. validate the canonical profile and any local override;
+1. validate the canonical profile, local build overrides and local settings sources;
 2. acquire the vault lock and recover an interrupted change;
 3. parse the installation receipt and compare its profile digest;
 4. derive expected plugin membership from the profile and valid optional omissions;
 5. compare canonical installs with their declared digests;
 6. compare local installs with the override path, Git state, and recorded bytes;
-7. report changes to governed configuration;
-8. release the vault lock.
+7. rerun each adapter and compare the regenerated file with native state;
+8. report changes to governed configuration;
+9. release the vault lock.
 
 Release files and mutable plugin state remain separate. Release files have canonical digests. A declared mutable JSON file may change after installation, but it must remain valid JSON at its exact lowercase root-level path. Undeclared files, directories, symbolic links and other mutable file types fail verification.

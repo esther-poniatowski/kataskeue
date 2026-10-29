@@ -25,10 +25,18 @@ export interface PluginInstaller {
   install(vault: string, plugins: readonly InstallablePlugin[]): Promise<void>;
 }
 
+export interface SettingsProjectionContext {
+  readonly consumerRoot: string;
+}
+
 /** Generates a complete native settings file from a project-owned source. */
 export interface SettingsAdapter {
   supports(plugin: PluginRecord): boolean;
-  project(source: string, destination: string): Promise<void>;
+  project(
+    source: string,
+    destination: string,
+    context: SettingsProjectionContext,
+  ): Promise<void>;
 }
 
 export interface OverrideState {

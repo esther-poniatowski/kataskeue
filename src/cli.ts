@@ -13,6 +13,10 @@ import {
   parseProfile,
   type LocalOverrides,
 } from "./domain/profile.js";
+import {
+  parseLocalSettingsSources,
+  type LocalSettingsSources,
+} from "./domain/localSettingsSources.js";
 import { LauncherBundleProvider } from "./infrastructure/launcherBundleProvider.js";
 import { GitOverrideInspector } from "./infrastructure/gitOverrideInspector.js";
 import { ObsidianLauncherInstaller } from "./infrastructure/obsidianLauncherInstaller.js";
@@ -31,6 +35,7 @@ async function main(argv: readonly string[]): Promise<void> {
       vault: { type: "string" },
       record: { type: "string" },
       "local-override": { type: "string" },
+      "local-settings": { type: "string" },
       delivery: { type: "boolean", default: false },
     },
     strict: true,
@@ -49,12 +54,30 @@ async function main(argv: readonly string[]): Promise<void> {
       profile,
     );
   }
+  let localSettingsSources: LocalSettingsSources = {};
+  if (values["local-settings"] !== undefined) {
+    localSettingsSources = parseLocalSettingsSources(
+      parseYaml(await readFile(values["local-settings"], "utf8")),
+      profile,
+    );
+  }
   const root = dirname(resolve(values.record));
+  const settingsAdapters = createSettingsAdapters();
 
   if (command === "check") {
     await checkProfile(
-      { vault: values.vault, root, profile, localOverrides },
-      { overrideInspector: new GitOverrideInspector() },
+      {
+        vault: values.vault,
+        root,
+        profile,
+        localOverrides,
+        localSettingsSources,
+        delivery: values.delivery,
+      },
+      {
+        overrideInspector: new GitOverrideInspector(),
+        settingsAdapters,
+      },
     );
     process.stdout.write("plugin profile matches the canonical record\n");
     return;
@@ -67,13 +90,14 @@ async function main(argv: readonly string[]): Promise<void> {
       root,
       profile,
       localOverrides,
+      localSettingsSources,
       delivery: values.delivery,
     },
     {
       bundles: new LauncherBundleProvider(launcher),
       installer: new ObsidianLauncherInstaller(launcher),
       overrideInspector: new GitOverrideInspector(),
-      settingsAdapters: createSettingsAdapters(),
+      settingsAdapters,
     },
   );
   process.stdout.write("plugin profile materialized and verified\n");
