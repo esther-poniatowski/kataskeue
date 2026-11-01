@@ -145,6 +145,17 @@ Pass the same local-settings record to `check`. The materializer reads exactly o
 
 Each command holds `.kataskeue.lock` for the complete check or change. A normal exit removes the lock. After an abnormal process exit, confirm that no materializer command is running before removing this file manually.
 
+## Findings log
+
+The `check` command can write its result as a SARIF 2.1.0 log, in the findings profile of the gate [Elenchos](https://github.com/esther-poniatowski/elenchos):
+
+```sh
+kataskeue check --vault PATH --record PATH/obsidian-plugins.yml \
+  --format sarif --output build/kataskeue.sarif --root .
+```
+
+The log states every path relative to `--root`. The root defaults to the current folder. A drift yields one result, located at the file or folder that drifted. The check stops at its first drift, so the run declares itself incomplete. The [findings output](docs/adr/findings-output.md) lists the rules and their locations.
+
 ## Recovery from drift
 
 `check` reports drift when an installed runtime file no longer matches its declared digest. Each installed file is a private copy, so the drift stays within the vault. Run `apply` again: it restores the file from the verified bundle.

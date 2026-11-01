@@ -7,7 +7,7 @@ This note assigns each part of the materializer to one module layer. The package
 | domain         | validates profiles, local build overrides and local settings sources; defines accepted records    |
 | application    | prepares the declared profile; compares file digests; reconciles installed state; checks receipts |
 | ports          | defines bundle, installer, settings and replacement interfaces                                    |
-| infrastructure | adapts `obsidian-launcher` and future authenticated or artifact providers                         |
+| infrastructure | adapts `obsidian-launcher` and future authenticated or artifact providers; writes findings logs   |
 
 Each plugin adapter belongs to the infrastructure layer. The adapter converts its versioned portable source into a complete native file. Its context supplies the consumer vault root when the adapter must inspect declared repository inputs.
 
@@ -42,5 +42,7 @@ The check route uses the same authority boundary:
 7. rerun each adapter and compare the regenerated file with native state;
 8. report changes to governed configuration;
 9. release the vault lock.
+
+Each comparison of the check runs as a step. A step applies one rule to one file or folder of the vault. An injected cursor records the step in progress. Therefore, the command line locates the first drift, and the error classes stay unchanged. The [findings output](adr/findings-output.md) fixes the rules and the location of each.
 
 Release files and mutable plugin state remain separate. Release files have canonical digests. A declared mutable JSON file may change after installation, but it must remain valid JSON at its exact lowercase root-level path. Undeclared files, directories, symbolic links and other mutable file types fail verification.
