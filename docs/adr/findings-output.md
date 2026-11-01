@@ -1,6 +1,6 @@
 # Findings output
 
-**Status**: Proposed. The decision implements the Kataskeue row of the [producer migration](https://github.com/esther-poniatowski/elenchos/blob/main/docs/producer-migration.md) of Elenchos, and depends on the [findings profile](https://github.com/esther-poniatowski/elenchos/blob/main/docs/profile.md) of Elenchos, still a draft.
+**Status**: Accepted. The decision implements the Kataskeue row of the [producer migration](https://github.com/esther-poniatowski/elenchos/blob/main/docs/producer-migration.md) of Elenchos, under its [findings profile](https://github.com/esther-poniatowski/elenchos/blob/main/docs/profile.md).
 
 ## Problem
 
