@@ -16,6 +16,11 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { applyProfile, checkProfile } from "../src/application/materializer.js";
+import {
+  CheckCursor,
+  observeCheck,
+  type CheckOutcome,
+} from "../src/application/checkSteps.js";
 import { recoverIncompleteTransaction } from "../src/application/transaction.js";
 import {
   parseProfile,
@@ -705,6 +710,101 @@ test("rejects symlinked runtime files before replacement", async () => {
     ),
     ProfileError,
   );
+});
+
+test("locates each drift at the step that detected it", async () => {
+  const fixture = await createFixture({
+    mutableJsonFiles: ["state.previous.json"],
+  });
+  await applyProfile(
+    { vault: fixture.vault, profile: fixture.profile },
+    {
+      bundles: new StaticProvider(fixture.bundle),
+      installer: new CopyingInstaller(),
+    },
+  );
+  const obsidian = join(fixture.vault, ".obsidian");
+  const receiptPath = join(obsidian, "plugin-installation.json");
+  const pluginRoot = join(obsidian, "plugins", "sample-plugin");
+  const observe = async (): Promise<CheckOutcome> => {
+    const cursor = new CheckCursor();
+    return observeCheck(
+      () =>
+        checkProfile(
+          { vault: fixture.vault, profile: fixture.profile },
+          { cursor },
+        ),
+      cursor,
+    );
+  };
+  const located = (outcome: CheckOutcome) =>
+    outcome.kind === "drift"
+      ? [outcome.step.rule, outcome.step.path, outcome.step.locus]
+      : outcome.kind;
+
+  assert.deepEqual(await observe(), { kind: "complete" });
+
+  const receiptText = await readFile(receiptPath, "utf8");
+  await rm(receiptPath);
+  assert.deepEqual(located(await observe()), [
+    "receipt/absent",
+    receiptPath,
+    "",
+  ]);
+  await writeFile(receiptPath, "not JSON\n");
+  assert.deepEqual(located(await observe()), [
+    "receipt/invalid",
+    receiptPath,
+    "",
+  ]);
+  const receipt = JSON.parse(receiptText) as Record<string, unknown>;
+  await writeFile(
+    receiptPath,
+    `${JSON.stringify({ ...receipt, profile_digest: "0".repeat(64) })}\n`,
+  );
+  assert.deepEqual(located(await observe()), [
+    "receipt/profile",
+    receiptPath,
+    "/profile_digest",
+  ]);
+  await writeFile(receiptPath, receiptText);
+
+  await writeFile(join(pluginRoot, "main.js"), "export const drifted = 1;\n");
+  const drift = await observe();
+  assert.deepEqual(located(drift), ["plugin/files", pluginRoot, ""]);
+  assert.equal(drift.kind === "drift" && drift.step.folder, true);
+  await writeFile(join(pluginRoot, "main.js"), main);
+
+  await writeFile(join(pluginRoot, "notes.txt"), "stray\n");
+  assert.deepEqual(located(await observe()), [
+    "plugin/undeclared-files",
+    pluginRoot,
+    "",
+  ]);
+  await rm(join(pluginRoot, "notes.txt"));
+
+  const statePath = join(pluginRoot, "state.previous.json");
+  await writeFile(statePath, "not JSON\n");
+  assert.deepEqual(located(await observe()), [
+    "plugin/mutable-json",
+    statePath,
+    "",
+  ]);
+});
+
+test("reports a failure before the first step as a failed check", async () => {
+  const fixture = await createFixture();
+  const cursor = new CheckCursor();
+  const invalid = {
+    ...fixture.profile,
+    format_version: 99,
+  } as unknown as PluginProfile;
+  const outcome = await observeCheck(
+    () => checkProfile({ vault: fixture.vault, profile: invalid }, { cursor }),
+    cursor,
+  );
+  assert.equal(outcome.kind, "failed");
+  assert.equal(outcome.kind === "failed" && outcome.started, false);
 });
 
 class StaticProvider implements BundleProvider {

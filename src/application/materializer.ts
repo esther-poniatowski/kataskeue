@@ -52,6 +52,12 @@ import type {
   ReceiptSettings,
 } from "./receipt.js";
 import { parseInstallationReceipt } from "./receipt.js";
+import {
+  CheckCursor,
+  fileStep,
+  folderStep,
+  type CheckRuleId,
+} from "./checkSteps.js";
 import { withVaultLock } from "./lock.js";
 import {
   recoverIncompleteTransaction,
@@ -296,13 +302,16 @@ async function applyProfileLocked(
   }
 }
 
+/** Dependencies of the check; the cursor records the step that failed. */
+export type CheckDependencies = Pick<
+  MaterializerDependencies,
+  "overrideInspector" | "settingsAdapters"
+> & { readonly cursor?: CheckCursor };
+
 /** Verify native state against the canonical profile and an optional local override record. */
 export async function checkProfile(
   options: CheckOptions,
-  dependencies: Pick<
-    MaterializerDependencies,
-    "overrideInspector" | "settingsAdapters"
-  > = {},
+  dependencies: CheckDependencies = {},
 ): Promise<InstallationReceipt> {
   const vault = resolve(options.vault);
   const profile = parseProfile(options.profile);
@@ -335,25 +344,31 @@ export async function checkProfile(
 
 async function checkProfileLocked(
   options: CheckOptions,
-  dependencies: Pick<
-    MaterializerDependencies,
-    "overrideInspector" | "settingsAdapters"
-  >,
+  dependencies: CheckDependencies,
 ): Promise<InstallationReceipt> {
   const vault = resolve(options.vault);
   const root = resolve(options.root ?? vault);
+  const cursor = dependencies.cursor ?? new CheckCursor();
   await recoverIncompleteTransaction(vault);
   const obsidian = join(vault, ".obsidian");
-  const receipt = parseInstallationReceipt(
-    JSON.parse(
-      await readFile(join(obsidian, "plugin-installation.json"), "utf8"),
+  const receiptPath = join(obsidian, "plugin-installation.json");
+  const atReceipt = (rule: CheckRuleId, locus = "") =>
+    fileStep(rule, receiptPath, locus);
+  const receiptText = await cursor.within(atReceipt("receipt/absent"), () =>
+    readVaultText(receiptPath, "installation receipt"),
+  );
+  const receipt = await cursor.within(atReceipt("receipt/invalid"), () =>
+    parseInstallationReceipt(
+      parseVaultJson(receiptText, "installation receipt"),
     ),
   );
-  if (receipt.profile_digest !== profileDigest(options.profile)) {
-    throw new DriftError(
-      "installation receipt belongs to another canonical profile",
-    );
-  }
+  await cursor.within(atReceipt("receipt/profile", "/profile_digest"), () => {
+    if (receipt.profile_digest !== profileDigest(options.profile)) {
+      throw new DriftError(
+        "installation receipt belongs to another canonical profile",
+      );
+    }
+  });
   await verifyNativeState(
     obsidian,
     root,
@@ -364,6 +379,7 @@ async function checkProfileLocked(
     dependencies.overrideInspector,
     dependencies.settingsAdapters ?? {},
     options.localSettingsSources ?? {},
+    cursor,
   );
   return receipt;
 }
@@ -471,125 +487,174 @@ async function verifyNativeState(
   overrideInspector?: OverrideInspector,
   settingsAdapters: Readonly<Record<string, SettingsAdapter>> = {},
   localSettingsSources: LocalSettingsSources = {},
+  cursor: CheckCursor = new CheckCursor(),
 ): Promise<void> {
-  if (JSON.stringify(receipt.runtime) !== JSON.stringify(profile.runtime)) {
-    throw new DriftError(
-      "installation receipt records another Obsidian runtime",
-    );
-  }
+  const receiptPath = join(obsidian, "plugin-installation.json");
+  const pluginsRoot = join(obsidian, "plugins");
+  const enabledPath = join(obsidian, "community-plugins.json");
+  await cursor.within(
+    fileStep("receipt/runtime", receiptPath, "/runtime"),
+    () => {
+      if (JSON.stringify(receipt.runtime) !== JSON.stringify(profile.runtime)) {
+        throw new DriftError(
+          "installation receipt records another Obsidian runtime",
+        );
+      }
+    },
+  );
   const profileById = new Map(
     profile.plugins.map((plugin) => [plugin.id, plugin]),
   );
-  const omittedIds = validateOmissions(profileById, receipt.omitted);
+  const omittedIds = await cursor.within(
+    fileStep("receipt/omissions", receiptPath, "/omitted"),
+    () => validateOmissions(profileById, receipt.omitted),
+  );
   const expectedIds = profile.plugins
     .filter((plugin) => !omittedIds.has(plugin.id))
     .map((plugin) => plugin.id)
     .sort();
-  const receiptIds = receipt.plugins.map((plugin) => plugin.id).sort();
-  if (
-    new Set(receiptIds).size !== receiptIds.length ||
-    !sameStrings(receiptIds, expectedIds)
-  ) {
-    throw new DriftError(
-      `receipt membership differs: expected ${expectedIds.join(", ")}; found ${receiptIds.join(", ")}`,
+  await cursor.within(
+    fileStep("receipt/membership", receiptPath, "/plugins"),
+    () => {
+      const receiptIds = receipt.plugins.map((plugin) => plugin.id).sort();
+      if (
+        new Set(receiptIds).size !== receiptIds.length ||
+        !sameStrings(receiptIds, expectedIds)
+      ) {
+        throw new DriftError(
+          `receipt membership differs: expected ${expectedIds.join(", ")}; found ${receiptIds.join(", ")}`,
+        );
+      }
+    },
+  );
+  await cursor.within(
+    folderStep("plugins/directories", pluginsRoot),
+    async () => {
+      const directories = (await safeReadDirectory(pluginsRoot)).sort();
+      if (!sameStrings(directories, expectedIds)) {
+        throw new DriftError(
+          `plugin directories differ: expected ${expectedIds.join(", ")}; found ${directories.join(", ")}`,
+        );
+      }
+    },
+  );
+  await cursor.within(fileStep("plugins/enabled", enabledPath), async () => {
+    const enabled = parseVaultJson(
+      await readVaultText(enabledPath, "community-plugins.json"),
+      "community-plugins.json",
     );
-  }
-  const directories = (
-    await safeReadDirectory(join(obsidian, "plugins"))
-  ).sort();
-  if (!sameStrings(directories, expectedIds)) {
-    throw new DriftError(
-      `plugin directories differ: expected ${expectedIds.join(", ")}; found ${directories.join(", ")}`,
-    );
-  }
-
-  const enabled = JSON.parse(
-    await readFile(join(obsidian, "community-plugins.json"), "utf8"),
-  ) as unknown;
-  const expectedEnabled = profile.plugins
-    .filter((plugin) => expectedIds.includes(plugin.id) && plugin.enabled)
-    .map((plugin) => plugin.id);
-  if (!Array.isArray(enabled) || !sameStrings(enabled, expectedEnabled)) {
-    throw new DriftError(
-      "community-plugins.json differs from the canonical enabled set",
-    );
-  }
-
-  for (const receiptPlugin of receipt.plugins) {
-    const plugin = profileById.get(receiptPlugin.id);
-    if (plugin === undefined) {
+    const expectedEnabled = profile.plugins
+      .filter((plugin) => expectedIds.includes(plugin.id) && plugin.enabled)
+      .map((plugin) => plugin.id);
+    if (!Array.isArray(enabled) || !sameStrings(enabled, expectedEnabled)) {
       throw new DriftError(
-        `receipt plugin ${receiptPlugin.id} is absent from the canonical profile`,
+        "community-plugins.json differs from the canonical enabled set",
       );
     }
-    if (
-      receiptPlugin.repository !== plugin.repository ||
-      JSON.stringify(receiptPlugin.bundle) !== JSON.stringify(plugin.bundle)
-    ) {
-      throw new DriftError(`receipt source differs for ${plugin.id}`);
-    }
-    if (
-      receiptPlugin.source !== "override" &&
-      receiptPlugin.source !== plugin.bundle.kind
-    ) {
-      throw new DriftError(`receipt source kind differs for ${plugin.id}`);
-    }
-    const pluginRoot = join(obsidian, "plugins", plugin.id);
-    const actual = await collectRuntimeDigests(plugin, pluginRoot);
-    if (JSON.stringify(actual) !== JSON.stringify(receiptPlugin.files)) {
-      throw new DriftError(`runtime files drifted for ${plugin.id}`);
-    }
+  });
+
+  for (const receiptPlugin of receipt.plugins) {
+    const pluginRoot = join(pluginsRoot, receiptPlugin.id);
+    const atPlugin = (rule: CheckRuleId) => folderStep(rule, pluginRoot);
+    const plugin = await cursor.within(atPlugin("plugin/source"), () => {
+      const record = profileById.get(receiptPlugin.id);
+      if (record === undefined) {
+        throw new DriftError(
+          `receipt plugin ${receiptPlugin.id} is absent from the canonical profile`,
+        );
+      }
+      if (
+        receiptPlugin.repository !== record.repository ||
+        JSON.stringify(receiptPlugin.bundle) !== JSON.stringify(record.bundle)
+      ) {
+        throw new DriftError(`receipt source differs for ${record.id}`);
+      }
+      if (
+        receiptPlugin.source !== "override" &&
+        receiptPlugin.source !== record.bundle.kind
+      ) {
+        throw new DriftError(`receipt source kind differs for ${record.id}`);
+      }
+      return record;
+    });
+    const actual = await cursor.within(atPlugin("plugin/files"), async () => {
+      const files = await collectRuntimeDigests(plugin, pluginRoot);
+      if (JSON.stringify(files) !== JSON.stringify(receiptPlugin.files)) {
+        throw new DriftError(`runtime files drifted for ${plugin.id}`);
+      }
+      return files;
+    });
 
     const override = overrides[plugin.id];
     if (override === undefined) {
-      if (receiptPlugin.source === "override") {
-        throw new DriftError(`local override is active for ${plugin.id}`);
-      }
-      assertDigestMap(plugin, actual);
+      await cursor.within(atPlugin("override/active"), () => {
+        if (receiptPlugin.source === "override") {
+          throw new DriftError(`local override is active for ${plugin.id}`);
+        }
+      });
+      await cursor.within(atPlugin("plugin/digest"), () =>
+        assertDigestMap(plugin, actual),
+      );
     } else {
       const expectedPath = resolve(root, override.path);
-      if (
-        receiptPlugin.source !== "override" ||
-        receiptPlugin.override?.path !== expectedPath
-      ) {
-        throw new DriftError(`local override state differs for ${plugin.id}`);
-      }
+      const recorded = await cursor.within(atPlugin("override/state"), () => {
+        if (
+          receiptPlugin.source !== "override" ||
+          receiptPlugin.override?.path !== expectedPath
+        ) {
+          throw new DriftError(`local override state differs for ${plugin.id}`);
+        }
+        return receiptPlugin.override;
+      });
       if (overrideInspector === undefined) {
         throw new DriftError(
           `no override inspector is configured for ${plugin.id}`,
         );
       }
-      const currentOverride = await overrideInspector.inspect(expectedPath);
-      if (
-        currentOverride.commit !== receiptPlugin.override.commit ||
-        currentOverride.dirty !== receiptPlugin.override.dirty
-      ) {
-        throw new DriftError(
-          `local override source state drifted for ${plugin.id}`,
-        );
-      }
-      await verifyBundleIdentity(plugin, expectedPath);
-      const currentOverrideFiles = await collectRuntimeDigests(
-        plugin,
-        expectedPath,
+      await cursor.within(atPlugin("override/source"), async () => {
+        const currentOverride = await overrideInspector.inspect(expectedPath);
+        if (
+          currentOverride.commit !== recorded.commit ||
+          currentOverride.dirty !== recorded.dirty
+        ) {
+          throw new DriftError(
+            `local override source state drifted for ${plugin.id}`,
+          );
+        }
+      });
+      await cursor.within(atPlugin("override/manifest"), () =>
+        verifyBundleIdentity(plugin, expectedPath),
       );
-      if (
-        JSON.stringify(currentOverrideFiles) !==
-        JSON.stringify(receiptPlugin.files)
-      ) {
-        throw new DriftError(`local override bytes drifted for ${plugin.id}`);
-      }
+      await cursor.within(atPlugin("override/files"), async () => {
+        const currentOverrideFiles = await collectRuntimeDigests(
+          plugin,
+          expectedPath,
+        );
+        if (
+          JSON.stringify(currentOverrideFiles) !==
+          JSON.stringify(receiptPlugin.files)
+        ) {
+          throw new DriftError(`local override bytes drifted for ${plugin.id}`);
+        }
+      });
     }
 
-    const extra = (await safeReadDirectory(pluginRoot)).filter(
-      (entry) => !allowedPluginFiles(plugin).has(entry),
-    );
-    if (extra.length > 0) {
-      throw new DriftError(
-        `undeclared files remain for ${plugin.id}: ${extra.join(", ")}`,
+    await cursor.within(atPlugin("plugin/undeclared-files"), async () => {
+      const extra = (await safeReadDirectory(pluginRoot)).filter(
+        (entry) => !allowedPluginFiles(plugin).has(entry),
+      );
+      if (extra.length > 0) {
+        throw new DriftError(
+          `undeclared files remain for ${plugin.id}: ${extra.join(", ")}`,
+        );
+      }
+    });
+    for (const file of plugin.mutable_json_files ?? []) {
+      const path = join(pluginRoot, file);
+      await cursor.within(fileStep("plugin/mutable-json", path), () =>
+        readMutableJsonFile(path, `${plugin.id}/${file}`),
       );
     }
-    await verifyMutableJsonFiles(plugin, pluginRoot);
     await verifySettings(
       plugin,
       root,
@@ -598,6 +663,7 @@ async function verifyNativeState(
       receiptPlugin.settings,
       settingsAdapters,
       localSettingsSources,
+      cursor,
     );
   }
 }
@@ -631,49 +697,65 @@ async function verifySettings(
   receipt: ReceiptSettings | undefined,
   adapters: Readonly<Record<string, SettingsAdapter>>,
   localSettingsSources: LocalSettingsSources,
+  cursor: CheckCursor,
 ): Promise<void> {
   const native = join(pluginRoot, "data.json");
+  const atSource = folderStep("settings/source", pluginRoot);
   if (plugin.settings.policy === "project-owned") {
-    await resolveSourceFile(
-      root,
-      plugin.settings.source,
-      `${plugin.id} project-owned settings`,
+    const source = plugin.settings.source;
+    await cursor.within(atSource, () =>
+      resolveSourceFile(root, source, `${plugin.id} project-owned settings`),
     );
-    if (await exists(native)) {
-      throw new DriftError(
-        `project-owned settings produced data.json for ${plugin.id}`,
-      );
-    }
+    await cursor.within(fileStep("settings/native", native), async () => {
+      if (await exists(native)) {
+        throw new DriftError(
+          `project-owned settings produced data.json for ${plugin.id}`,
+        );
+      }
+    });
     return;
   }
   if (plugin.settings.policy === "losslessly-projected") {
-    const source = await selectSettingsSource(
-      plugin,
-      root,
-      localSettingsSources,
+    const { source, projectedDigest } = await cursor.within(
+      atSource,
+      async () => {
+        const selected = await selectSettingsSource(
+          plugin,
+          root,
+          localSettingsSources,
+        );
+        const adapter = requireSettingsAdapter(plugin, adapters);
+        return {
+          source: selected,
+          projectedDigest: await projectSettingsDigest(
+            adapter,
+            plugin,
+            selected.path,
+            consumerRoot,
+          ),
+        };
+      },
     );
-    const adapter = requireSettingsAdapter(plugin, adapters);
-    const projectedDigest = await projectSettingsDigest(
-      adapter,
-      plugin,
-      source.path,
-      consumerRoot,
-    );
-    if (
-      receipt === undefined ||
-      receipt.adapter !== plugin.settings.adapter ||
-      receipt.source_mode !== source.mode ||
-      receipt.source_sha256 !== (await sha256(source.path)) ||
-      receipt.native_sha256 !== (await sha256(native)) ||
-      projectedDigest !== receipt.native_sha256
-    ) {
-      throw new DriftError(`projected settings drifted for ${plugin.id}`);
-    }
+    const adapterName = plugin.settings.adapter;
+    await cursor.within(fileStep("settings/projected", native), async () => {
+      if (
+        receipt === undefined ||
+        receipt.adapter !== adapterName ||
+        receipt.source_mode !== source.mode ||
+        receipt.source_sha256 !== (await sha256(source.path)) ||
+        receipt.native_sha256 !== (await sha256(native)) ||
+        projectedDigest !== receipt.native_sha256
+      ) {
+        throw new DriftError(`projected settings drifted for ${plugin.id}`);
+      }
+    });
     return;
   }
-  if (receipt !== undefined) {
-    throw new DriftError(`unexpected settings receipt for ${plugin.id}`);
-  }
+  await cursor.within(folderStep("settings/receipt", pluginRoot), () => {
+    if (receipt !== undefined) {
+      throw new DriftError(`unexpected settings receipt for ${plugin.id}`);
+    }
+  });
 }
 
 async function collectSettingsReceipt(
@@ -892,15 +974,6 @@ async function preserveMutableJsonFiles(
   }
 }
 
-async function verifyMutableJsonFiles(
-  plugin: PluginRecord,
-  pluginRoot: string,
-): Promise<void> {
-  for (const file of plugin.mutable_json_files ?? []) {
-    await readMutableJsonFile(join(pluginRoot, file), `${plugin.id}/${file}`);
-  }
-}
-
 async function readMutableJsonFile(
   path: string,
   label: string,
@@ -1023,6 +1096,27 @@ async function exists(path: string): Promise<boolean> {
     return true;
   } catch (error) {
     return isMissing(error) ? false : Promise.reject(error);
+  }
+}
+
+/** Read a file of the vault, reporting its absence as drift. */
+async function readVaultText(path: string, label: string): Promise<string> {
+  try {
+    return await readFile(path, "utf8");
+  } catch (error) {
+    if (isMissing(error)) {
+      throw new DriftError(`${label} is absent`);
+    }
+    throw error;
+  }
+}
+
+/** Parse a file of the vault, reporting invalid JSON as drift. */
+function parseVaultJson(text: string, label: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new DriftError(`${label} is not valid JSON`);
   }
 }
 
