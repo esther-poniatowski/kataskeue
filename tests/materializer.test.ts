@@ -621,6 +621,108 @@ test("reprojects settings while checking dependent inputs", async () => {
   );
 });
 
+test("reads a tool settings file at the one place that the conventions fix", async () => {
+  const fixture = await createFixture({
+    settings: { policy: "losslessly-projected", adapter: "sample" },
+  });
+  const adapter: SettingsAdapter = {
+    toolSettingsFile: "sample.yml",
+    supports: () => true,
+    async project(source, destination) {
+      await writeFile(destination, await readFile(source, "utf8"));
+    },
+  };
+  const dependencies = {
+    bundles: new StaticProvider(fixture.bundle),
+    installer: new CopyingInstaller(),
+    settingsAdapters: { sample: adapter },
+  };
+  const options = { vault: fixture.vault, profile: fixture.profile };
+  const nested = join(fixture.vault, "config", "tools", "sample.yml");
+  const flat = join(fixture.vault, "sample.yml");
+
+  await assert.rejects(applyProfile(options, dependencies), (error: Error) => {
+    assert.ok(error instanceof ProfileError);
+    assert.match(error.message, /looked for .*config\/tools\/sample\.yml/);
+    return true;
+  });
+
+  await mkdir(join(fixture.vault, "config", "tools"), { recursive: true });
+  await writeFile(nested, "value: 1\n");
+  await applyProfile(options, dependencies);
+  assert.equal(
+    await readFile(
+      join(fixture.vault, ".obsidian", "plugins", "sample-plugin", "data.json"),
+      "utf8",
+    ),
+    "value: 1\n",
+  );
+  await checkProfile(options, { settingsAdapters: { sample: adapter } });
+
+  await writeFile(flat, "value: 1\n");
+  await assert.rejects(
+    checkProfile(options, { settingsAdapters: { sample: adapter } }),
+    (error: Error) => {
+      assert.ok(error instanceof ProfileError);
+      assert.ok(error.message.includes(nested) && error.message.includes(flat));
+      return true;
+    },
+  );
+
+  await rm(nested);
+  await checkProfile(options, { settingsAdapters: { sample: adapter } });
+});
+
+test("pairs a declared settings source only with an adapter without a tool file", async () => {
+  const declared = await createFixture({
+    settings: {
+      policy: "losslessly-projected",
+      source: "sample.yml",
+      adapter: "sample",
+    },
+  });
+  await writeFile(join(declared.vault, "sample.yml"), "value: 1\n");
+  const toolAdapter: SettingsAdapter = {
+    toolSettingsFile: "sample.yml",
+    supports: () => true,
+    async project() {
+      assert.fail("a rejected pairing must not project settings");
+    },
+  };
+  await assert.rejects(
+    applyProfile(
+      { vault: declared.vault, profile: declared.profile },
+      {
+        bundles: new StaticProvider(declared.bundle),
+        installer: new CopyingInstaller(),
+        settingsAdapters: { sample: toolAdapter },
+      },
+    ),
+    /remove settings\.source/,
+  );
+
+  const undeclared = await createFixture({
+    settings: { policy: "losslessly-projected", adapter: "sample" },
+  });
+  const plainAdapter: SettingsAdapter = {
+    supports: () => true,
+    async project() {
+      assert.fail("a rejected pairing must not project settings");
+    },
+  };
+  await assert.rejects(
+    applyProfile(
+      { vault: undeclared.vault, profile: undeclared.profile },
+      {
+        bundles: new StaticProvider(undeclared.bundle),
+        installer: new CopyingInstaller(),
+        settingsAdapters: { sample: plainAdapter },
+      },
+    ),
+    /require settings\.source/,
+  );
+});
+
 test("rejects an incompatible settings adapter before projection", async () => {
   const fixture = await createFixture({
     settings: {

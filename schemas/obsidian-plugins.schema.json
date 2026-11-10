@@ -192,7 +192,6 @@
                     },
                     "required": [
                       "policy",
-                      "source",
                       "adapter"
                     ],
                     "additionalProperties": false
@@ -375,7 +374,6 @@
                     },
                     "required": [
                       "policy",
-                      "source",
                       "adapter"
                     ],
                     "additionalProperties": false

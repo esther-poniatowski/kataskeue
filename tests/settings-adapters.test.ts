@@ -25,7 +25,10 @@ test("projects the complete Ekphrasis native settings", async () => {
       "",
     ].join("\n"),
   );
-  await new EkphrasisSettingsAdapter().project(source, destination);
+  await new EkphrasisSettingsAdapter().project(source, destination, {
+    consumerRoot: root,
+    root,
+  });
   assert.deepEqual(JSON.parse(await readFile(destination, "utf8")), {
     schemaRegistry: "specs/schema-registry.yml",
     pathRules: [
@@ -143,13 +146,52 @@ test("rejects a settings adapter assigned to an incompatible plugin bundle", () 
   );
 });
 
+test("writes the root-relative Ekphrasis paths as vault paths", async () => {
+  const vault = await mkdtemp(join(tmpdir(), "ekphrasis-vault-"));
+  const root = join(vault, "projects", "sample");
+  await mkdir(root, { recursive: true });
+  const source = join(root, "ekphrasis.yml");
+  const destination = join(vault, "data.json");
+  await writeFile(
+    source,
+    [
+      "format_version: 1",
+      "schema_registry: specs/schema-registry.yml",
+      "path_rules:",
+      '  - pattern: "**/{glossary,*.glossary}.yml"',
+      "    schema: specs/schemas/glossary.schema.yaml",
+      "commit_delay: 0",
+      "",
+    ].join("\n"),
+  );
+  const adapter = new EkphrasisSettingsAdapter();
+  await adapter.project(source, destination, { consumerRoot: vault, root });
+  assert.deepEqual(JSON.parse(await readFile(destination, "utf8")), {
+    schemaRegistry: "projects/sample/specs/schema-registry.yml",
+    pathRules: [
+      {
+        pattern: "projects/sample/**/{glossary,*.glossary}.yml",
+        schema: "projects/sample/specs/schemas/glossary.schema.yaml",
+      },
+    ],
+    commitDelay: 0,
+  });
+  await assert.rejects(
+    adapter.project(source, destination, { consumerRoot: root, root: vault }),
+    /lies outside the vault/,
+  );
+});
+
 test("rejects malformed adapter sources and nonportable Ekphrasis paths", async () => {
   const root = await mkdtemp(join(tmpdir(), "invalid-settings-"));
   const destination = join(root, "data.json");
   const malformed = join(root, "malformed.yml");
   await writeFile(malformed, "field: [\n");
   await assert.rejects(
-    new EkphrasisSettingsAdapter().project(malformed, destination),
+    new EkphrasisSettingsAdapter().project(malformed, destination, {
+      consumerRoot: root,
+      root,
+    }),
     ProfileError,
   );
 
@@ -165,7 +207,10 @@ test("rejects malformed adapter sources and nonportable Ekphrasis paths", async 
     ].join("\n"),
   );
   await assert.rejects(
-    new EkphrasisSettingsAdapter().project(escaping, destination),
+    new EkphrasisSettingsAdapter().project(escaping, destination, {
+      consumerRoot: root,
+      root,
+    }),
     ProfileError,
   );
 });
@@ -225,6 +270,7 @@ test("projects exact Sieve rules for unselected project directories", async () =
 
   await new SieveSettingsAdapter().project(source, destination, {
     consumerRoot: root,
+    root,
   });
   assert.deepEqual(JSON.parse(await readFile(destination, "utf8")), {
     schemaVersion: 1,
@@ -252,6 +298,7 @@ test("projects empty Sieve rules when every project is selected", async () => {
 
   await new SieveSettingsAdapter().project(source, destination, {
     consumerRoot: root,
+    root,
   });
   assert.equal(
     (JSON.parse(await readFile(destination, "utf8")) as { rules: string })
@@ -280,6 +327,7 @@ test("rejects duplicate Sieve project identifiers", async () => {
   await assert.rejects(
     new SieveSettingsAdapter().project(source, destination, {
       consumerRoot: root,
+      root,
     }),
     ProfileError,
   );
@@ -304,6 +352,7 @@ test("rejects a selected identifier absent from the project inventory", async ()
   await assert.rejects(
     new SieveSettingsAdapter().project(source, destination, {
       consumerRoot: root,
+      root,
     }),
     ProfileError,
   );
@@ -333,6 +382,7 @@ test("rejects duplicate and unsorted selected project identifiers", async () => 
     await assert.rejects(
       new SieveSettingsAdapter().project(source, destination, {
         consumerRoot: root,
+        root,
       }),
       ProfileError,
     );
@@ -363,6 +413,7 @@ test("rejects unsafe project directories and malformed specifications", async ()
     await assert.rejects(
       new SieveSettingsAdapter().project(source, destination, {
         consumerRoot: root,
+        root,
       }),
       ProfileError,
     );

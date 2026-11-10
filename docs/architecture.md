@@ -9,7 +9,7 @@ This note assigns each part of the materializer to one module layer. The package
 | ports          | defines bundle, installer, settings and replacement interfaces                                    |
 | infrastructure | adapts `obsidian-launcher` and future authenticated or artifact providers; writes findings logs   |
 
-Each plugin adapter belongs to the infrastructure layer. The adapter converts its versioned portable source into a complete native file. Its context supplies the consumer vault root when the adapter must inspect declared repository inputs.
+Each plugin adapter belongs to the infrastructure layer. The adapter converts its versioned portable source into a complete native file. Its context supplies the consumer vault root when the adapter must inspect declared repository inputs. The context also supplies the root of the consumer repository, from which a tool settings file resolves its paths.
 
 The application layer receives every external collaborator through a port. Therefore, local inputs suffice to validate and reconcile a profile. Providers contain the network code, and an installer port contains the concrete launcher.
 

@@ -44,6 +44,7 @@ import type {
   PluginInstaller,
   ReplaceOperations,
   SettingsAdapter,
+  SettingsProjectionContext,
 } from "../ports.js";
 import type {
   InstallationReceipt,
@@ -92,6 +93,7 @@ export interface CheckOptions {
 }
 
 interface SelectedSettingsSource {
+  readonly adapter: SettingsAdapter;
   readonly path: string;
   readonly mode: "canonical" | "local";
 }
@@ -232,6 +234,7 @@ async function applyProfileLocked(
         plugin.record,
         root,
         installed,
+        dependencies.settingsAdapters ?? {},
         localSettingsSources,
       );
       receiptPlugins.push({
@@ -459,13 +462,16 @@ async function reconcileSettings(
     return;
   }
   if (plugin.settings.policy === "losslessly-projected") {
-    const adapter = requireSettingsAdapter(plugin, adapters);
     const source = await selectSettingsSource(
       plugin,
       root,
+      adapters,
       localSettingsSources,
     );
-    await adapter.project(source.path, destination, { consumerRoot });
+    await source.adapter.project(source.path, destination, {
+      consumerRoot,
+      root,
+    });
     await requireFile(destination, `${plugin.id} projected settings`);
     return;
   }
@@ -722,16 +728,16 @@ async function verifySettings(
         const selected = await selectSettingsSource(
           plugin,
           root,
+          adapters,
           localSettingsSources,
         );
-        const adapter = requireSettingsAdapter(plugin, adapters);
         return {
           source: selected,
           projectedDigest: await projectSettingsDigest(
-            adapter,
+            selected.adapter,
             plugin,
             selected.path,
-            consumerRoot,
+            { consumerRoot, root },
           ),
         };
       },
@@ -762,12 +768,18 @@ async function collectSettingsReceipt(
   plugin: PluginRecord,
   root: string,
   installed: string,
+  adapters: Readonly<Record<string, SettingsAdapter>>,
   localSettingsSources: LocalSettingsSources,
 ): Promise<ReceiptSettings | undefined> {
   if (plugin.settings.policy !== "losslessly-projected") {
     return undefined;
   }
-  const source = await selectSettingsSource(plugin, root, localSettingsSources);
+  const source = await selectSettingsSource(
+    plugin,
+    root,
+    adapters,
+    localSettingsSources,
+  );
   return {
     adapter: plugin.settings.adapter,
     source_mode: source.mode,
@@ -797,18 +809,40 @@ function requireSettingsAdapter(
   return adapter;
 }
 
+/**
+ * Select the adapter of a projected plugin and the one source that it reads.
+ *
+ * A local source replaces the canonical source in full. The canonical source of an adapter
+ * that reads the settings file of its tool lies at the place fixed by the command-line
+ * conventions; the record names the source of every other adapter.
+ */
 async function selectSettingsSource(
   plugin: PluginRecord,
   root: string,
+  adapters: Readonly<Record<string, SettingsAdapter>>,
   localSettingsSources: LocalSettingsSources,
 ): Promise<SelectedSettingsSource> {
   if (plugin.settings.policy !== "losslessly-projected") {
     throw new ProfileError(`${plugin.id} does not use projected settings`);
   }
+  const adapter = requireSettingsAdapter(plugin, adapters);
+  const canonical = canonicalSettingsSource(
+    plugin.id,
+    plugin.settings.source,
+    adapter.toolSettingsFile,
+  );
   const local = localSettingsSources[plugin.id];
   const mode = local === undefined ? "canonical" : "local";
-  const source = local?.source ?? plugin.settings.source;
+  let source: string;
+  if (local !== undefined) {
+    source = local.source;
+  } else if (canonical.kind === "declared") {
+    source = canonical.path;
+  } else {
+    source = await locateToolSettingsFile(root, canonical.name, plugin.id);
+  }
   return {
+    adapter,
     mode,
     path: await resolveSourceFile(
       root,
@@ -818,16 +852,87 @@ async function selectSettingsSource(
   };
 }
 
+type CanonicalSettingsSource =
+  | { readonly kind: "declared"; readonly path: string }
+  | { readonly kind: "tool"; readonly name: string };
+
+/** Pair the source declared by the record with the tool settings file of the adapter. */
+function canonicalSettingsSource(
+  pluginId: string,
+  declared: string | undefined,
+  toolFile: string | undefined,
+): CanonicalSettingsSource {
+  if (toolFile !== undefined) {
+    if (declared !== undefined) {
+      throw new ProfileError(
+        `${pluginId} reads the tool settings file ${toolFile}, whose place is fixed; remove settings.source from the record`,
+      );
+    }
+    return { kind: "tool", name: toolFile };
+  }
+  if (declared === undefined) {
+    throw new ProfileError(
+      `${pluginId} settings require settings.source in the record`,
+    );
+  }
+  return { kind: "declared", path: declared };
+}
+
+/**
+ * Return the root-relative path of the settings file of a tool.
+ *
+ * The file lies at `config/tools/<name>` or at `<name>` below the root. Two files are an error
+ * that names both, since a silent precedence would apply a file that the researcher does not
+ * expect.
+ */
+async function locateToolSettingsFile(
+  root: string,
+  name: string,
+  pluginId: string,
+): Promise<string> {
+  const candidates = [`config/tools/${name}`, name];
+  const present: string[] = [];
+  for (const candidate of candidates) {
+    if (await entryExists(join(root, candidate))) {
+      present.push(candidate);
+    }
+  }
+  if (present.length > 1) {
+    throw new ProfileError(
+      `${pluginId} has two settings files, ${present.map((path) => join(root, path)).join(" and ")}; keep one`,
+    );
+  }
+  const [found] = present;
+  if (found === undefined) {
+    throw new ProfileError(
+      `${pluginId} settings file is missing: looked for ${candidates.map((path) => join(root, path)).join(" and ")}`,
+    );
+  }
+  return found;
+}
+
+async function entryExists(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    if (isMissing(error)) {
+      return false;
+    }
+    throw error;
+  }
+}
+
 async function projectSettingsDigest(
   adapter: SettingsAdapter,
   plugin: PluginRecord,
   source: string,
-  consumerRoot: string,
+  context: SettingsProjectionContext,
 ): Promise<string> {
   const temporary = await mkdtemp(join(tmpdir(), "kataskeue-settings-"));
   try {
     const destination = join(temporary, "data.json");
-    await adapter.project(source, destination, { consumerRoot });
+    await adapter.project(source, destination, context);
     await requireFile(destination, `${plugin.id} projected settings`);
     return await sha256(destination);
   } finally {

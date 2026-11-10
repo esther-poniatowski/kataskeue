@@ -1,14 +1,19 @@
 # Settings adapters
 
-The settings adapters generate complete native plugin settings from portable YAML sources. A profile selects an adapter through `settings.adapter` and names its YAML source through `settings.source`.
+The settings adapters generate complete native plugin settings from portable YAML sources. A profile selects an adapter through `settings.adapter`. The canonical source of an adapter has one of two places:
 
-The local-settings flag `--local-settings` may select a complete local source. The local record maps a plugin identifier to one source path. The adapter reads either that source or the canonical source. Both paths resolve from the directory containing the canonical profile. Delivery mode rejects every active local source.
+- the adapter of a tool of the workspace reads the settings file of that tool, at `config/tools/<tool>.yml` or `<tool>.yml` below the root, and the profile names no `settings.source`;
+- any other adapter reads the YAML source named by `settings.source`.
+
+The [command-line conventions](https://github.com/esther-poniatowski/keystone/blob/main/docs/internals/cli-conventions.md) of the workspace fix the place of a tool settings file. When files exist at both places, the materializer stops with an error that names both. A profile that names `settings.source` for such an adapter is invalid.
+
+The local-settings flag `--local-settings` may select a complete local source. The local record maps a plugin identifier to one source path. The adapter reads either that source or the canonical source. Both paths resolve from the root of the consumer repository. Delivery mode rejects every active local source.
 
 During `check`, each adapter regenerates its expected native file. Therefore, the check detects changes in inputs read beside the source file.
 
 ## Ekphrasis
 
-The adapter identifier `ekphrasis@1` accepts the source below:
+The adapter identifier `ekphrasis@1` reads the settings file of Ekphrasis, `config/tools/ekphrasis.yml` or `ekphrasis.yml` at the root. It accepts the source below:
 
 ```yaml
 format_version: 1
@@ -19,7 +24,7 @@ path_rules:
 commit_delay: 1000
 ```
 
-The registry path and each rule path must remain relative to the vault root. Absolute paths, parent traversal and backslashes are invalid. The commit delay is a nonnegative integer measured in milliseconds. The adapter writes the native keys `schemaRegistry`, `pathRules` and `commitDelay`.
+The registry path and each rule path are relative to the root, wherever the file lies. Absolute paths, parent traversal and backslashes are invalid. The commit delay is a nonnegative integer measured in milliseconds. The adapter writes the native keys `schemaRegistry`, `pathRules` and `commitDelay`. The plugin resolves these native paths inside the vault, so the adapter prefixes each path with the folder of the root inside the vault. A root outside the vault is an error.
 
 ## Full Calendar Remastered
 
