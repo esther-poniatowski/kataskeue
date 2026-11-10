@@ -2,7 +2,7 @@
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 import ObsidianLauncher from "obsidian-launcher";
@@ -22,11 +22,23 @@ import {
 import { LauncherBundleProvider } from "./infrastructure/launcherBundleProvider.js";
 import { GitOverrideInspector } from "./infrastructure/gitOverrideInspector.js";
 import { ObsidianLauncherInstaller } from "./infrastructure/obsidianLauncherInstaller.js";
+import { ProfileError } from "./errors.js";
 import { createSettingsAdapters } from "./infrastructure/settings/settingsAdapters.js";
 import { pathWithin, sarifLog } from "./infrastructure/sarifLog.js";
 
 const USAGE =
-  "usage: kataskeue <apply|check> --vault PATH --record PATH [--format text|sarif] [--output PATH] [--root PATH]";
+  "usage: kataskeue <apply|check> [-r ROOT] [--vault PATH] [--record PATH] [--local-override PATH] [--local-settings PATH] [--delivery] [--format text|sarif] [-o PATH]\n       kataskeue -v|--version";
+
+/** Name of the canonical record at the root, read when `--record` is absent. */
+const RECORD_FILE = "obsidian-plugins.yml";
+
+/** A wrong invocation or an unusable input file: exit status 2. */
+class UsageError extends Error {
+  override readonly name = "UsageError";
+}
+
+/** Exit statuses of the command-line conventions of the workspace. */
+const EXIT = { problem: 1, usage: 2 } as const;
 
 interface Inputs {
   readonly vault: string;
@@ -38,6 +50,7 @@ interface Inputs {
 }
 
 interface InputPaths {
+  readonly root: string;
   readonly vault: string;
   readonly record: string;
   readonly localOverride: string | undefined;
@@ -45,25 +58,41 @@ interface InputPaths {
   readonly delivery: boolean;
 }
 
+/** Read one input file named on the command line or found at the root. */
+async function readInputFile(path: string, label: string): Promise<unknown> {
+  let contents: string;
+  try {
+    contents = await readFile(path, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new UsageError(`${label} is missing: ${path}`);
+    }
+    throw error;
+  }
+  return parseYaml(contents);
+}
+
 async function readInputs(paths: InputPaths): Promise<Inputs> {
-  const profile = parseProfile(parseYaml(await readFile(paths.record, "utf8")));
+  const profile = parseProfile(
+    await readInputFile(paths.record, "the canonical record"),
+  );
   let localOverrides: LocalOverrides = {};
   if (paths.localOverride !== undefined) {
     localOverrides = parseLocalOverrides(
-      parseYaml(await readFile(paths.localOverride, "utf8")),
+      await readInputFile(paths.localOverride, "the local-override record"),
       profile,
     );
   }
   let localSettingsSources: LocalSettingsSources = {};
   if (paths.localSettings !== undefined) {
     localSettingsSources = parseLocalSettingsSources(
-      parseYaml(await readFile(paths.localSettings, "utf8")),
+      await readInputFile(paths.localSettings, "the local-settings record"),
       profile,
     );
   }
   return {
     vault: paths.vault,
-    root: dirname(resolve(paths.record)),
+    root: paths.root,
     profile,
     localOverrides,
     localSettingsSources,
@@ -79,43 +108,66 @@ function packageVersion(): string {
   return manifest.version;
 }
 
-async function main(argv: readonly string[]): Promise<void> {
-  const [command, ...commandArguments] = argv;
-  if (command !== "apply" && command !== "check") {
-    throw new Error(USAGE);
+/**
+ * Resolve the root of the consumer repository.
+ *
+ * The option `--root` comes first, then the variable `KATASKEUE_ROOT`, then the current
+ * folder. Kataskeue has no settings file of its own, so it searches no ancestor.
+ */
+function resolveRoot(option: string | undefined): string {
+  const variable = process.env.KATASKEUE_ROOT;
+  return resolve(option ?? (variable === "" ? undefined : variable) ?? ".");
+}
+
+function parseCommand(argv: readonly string[]) {
+  try {
+    return parseArgs({
+      args: [...argv],
+      allowPositionals: true,
+      options: {
+        root: { type: "string", short: "r" },
+        vault: { type: "string" },
+        record: { type: "string" },
+        "local-override": { type: "string" },
+        "local-settings": { type: "string" },
+        delivery: { type: "boolean", default: false },
+        format: { type: "string", default: "text" },
+        output: { type: "string", short: "o" },
+        version: { type: "boolean", short: "v", default: false },
+      },
+      strict: true,
+    });
+  } catch (error) {
+    throw new UsageError(
+      `${error instanceof Error ? error.message : String(error)}\n${USAGE}`,
+    );
   }
-  const { values } = parseArgs({
-    args: commandArguments,
-    options: {
-      vault: { type: "string" },
-      record: { type: "string" },
-      "local-override": { type: "string" },
-      "local-settings": { type: "string" },
-      delivery: { type: "boolean", default: false },
-      format: { type: "string", default: "text" },
-      output: { type: "string" },
-      root: { type: "string" },
-    },
-    strict: true,
-  });
-  if (values.vault === undefined || values.record === undefined) {
-    throw new Error("the --vault and --record options are required");
+}
+
+async function main(argv: readonly string[]): Promise<void> {
+  const { values, positionals } = parseCommand(argv);
+  if (values.version) {
+    process.stdout.write(`kataskeue ${packageVersion()}\n`);
+    return;
+  }
+  const [command, ...extra] = positionals;
+  if ((command !== "apply" && command !== "check") || extra.length > 0) {
+    throw new UsageError(USAGE);
   }
   if (values.format !== "text" && values.format !== "sarif") {
-    throw new Error(`unknown format ${values.format}; ${USAGE}`);
+    throw new UsageError(`unknown format ${values.format}\n${USAGE}`);
   }
   if (values.format === "sarif" && command !== "check") {
-    throw new Error("only check writes a findings log");
+    throw new UsageError("only check writes a findings log");
   }
-  if (
-    values.format === "text" &&
-    (values.output !== undefined || values.root !== undefined)
-  ) {
-    throw new Error("the --output and --root options require --format sarif");
+  if (values.format === "text" && values.output !== undefined) {
+    throw new UsageError("the --output option requires --format sarif");
   }
+  const root = resolveRoot(values.root);
   const paths: InputPaths = {
-    vault: values.vault,
-    record: values.record,
+    root,
+    vault: resolve(values.vault ?? root),
+    record: resolve(values.record ?? join(root, RECORD_FILE)),
     localOverride: values["local-override"],
     localSettings: values["local-settings"],
     delivery: values.delivery,
@@ -124,20 +176,25 @@ async function main(argv: readonly string[]): Promise<void> {
 
   if (command === "check") {
     const cursor = new CheckCursor();
-    const sarifRoot = resolve(values.root ?? ".");
+    let failure: unknown;
     const check = async () => {
-      if (
-        values.format === "sarif" &&
-        pathWithin(sarifRoot, resolve(paths.vault)) === undefined
-      ) {
-        throw new Error(`the vault lies outside the root ${sarifRoot}`);
+      try {
+        if (
+          values.format === "sarif" &&
+          pathWithin(root, paths.vault) === undefined
+        ) {
+          throw new UsageError(`the vault lies outside the root ${root}`);
+        }
+        const inputs = await readInputs(paths);
+        await checkProfile(inputs, {
+          overrideInspector: new GitOverrideInspector(),
+          settingsAdapters,
+          cursor,
+        });
+      } catch (error) {
+        failure = error;
+        throw error;
       }
-      const inputs = await readInputs(paths);
-      await checkProfile(inputs, {
-        overrideInspector: new GitOverrideInspector(),
-        settingsAdapters,
-        cursor,
-      });
     };
     if (values.format === "text") {
       await check();
@@ -146,7 +203,7 @@ async function main(argv: readonly string[]): Promise<void> {
     }
     const outcome = await observeCheck(check, cursor);
     const log = `${JSON.stringify(
-      sarifLog(outcome, { root: sarifRoot, version: packageVersion() }),
+      sarifLog(outcome, { root, version: packageVersion() }),
       null,
       2,
     )}\n`;
@@ -156,8 +213,10 @@ async function main(argv: readonly string[]): Promise<void> {
       await mkdir(dirname(resolve(values.output)), { recursive: true });
       await writeFile(values.output, log);
     }
-    if (outcome.kind !== "complete") {
-      process.exitCode = 1;
+    if (outcome.kind === "drift") {
+      process.exitCode = EXIT.problem;
+    } else if (outcome.kind === "failed") {
+      process.exitCode = exitStatus(failure);
     }
     return;
   }
@@ -173,9 +232,20 @@ async function main(argv: readonly string[]): Promise<void> {
   process.stdout.write("plugin profile materialized and verified\n");
 }
 
+/**
+ * Return the exit status of an error: 2 for a wrong invocation or an invalid input, 1 for a
+ * drift found by the check or a failure of the command.
+ */
+function exitStatus(error: unknown): number {
+  if (error instanceof UsageError || error instanceof ProfileError) {
+    return EXIT.usage;
+  }
+  return EXIT.problem;
+}
+
 main(process.argv.slice(2)).catch((error: unknown) => {
   process.stderr.write(
     `${error instanceof Error ? error.message : String(error)}\n`,
   );
-  process.exitCode = 1;
+  process.exitCode = exitStatus(error);
 });

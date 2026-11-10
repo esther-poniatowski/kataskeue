@@ -10,7 +10,7 @@ The gate Elenchos reads the failures of each domain tool as a log of the Static 
 
 ### Output option
 
-The command `check` accepts `--format sarif`. With this option, the command writes one log on standard output. The option `--output PATH` writes the log to a file instead, and creates the missing parent folders. The option `--root PATH` names the root of the consumer repository, and the log states every path relative to that root. The root defaults to the current folder, since Elenchos runs each check from the root of the consumer. The vault must lie under the root. The command `apply` refuses `--format sarif`, since it changes the vault instead of checking it. The default `--format text` keeps the line on standard error. In both formats, the exit status is 0 for a complete check without drift, and 1 otherwise.
+The command `check` accepts `--format sarif`. With this option, the command writes one log on standard output. The option `--output PATH` writes the log to a file instead, and creates the missing parent folders. The log states every path relative to the root of the consumer repository. The root is the option `-r`, `--root PATH`, otherwise the variable `KATASKEUE_ROOT`, otherwise the current folder, since Elenchos runs each check from the root of the consumer. The vault must lie under the root. The command `apply` refuses `--format sarif`, since it changes the vault instead of checking it. The default `--format text` keeps the line on standard error. In both formats, the exit status is 0 for a complete check without drift, 1 for a drift or a failure of the check, and 2 for a usage error or an invalid input.
 
 ### Steps and rules
 

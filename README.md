@@ -30,7 +30,7 @@ A consumer can run Kataskeue at an exact commit without a checkout. The command 
 ```sh
 npx --yes npm@12.2.1 exec --yes --allow-git=root \
   --package=github:esther-poniatowski/kataskeue#<commit> \
-  -- kataskeue check --vault PATH --record PATH/obsidian-plugins.yml
+  -- kataskeue check
 ```
 
 The command pins npm 12.2.1 for two reasons. npm 10 cannot build a Git package with a `prepare` script during `exec`. npm 12 refuses Git sources by default. The option `--allow-git=root` admits only the named package.
@@ -81,15 +81,17 @@ Each plugin selects one settings policy:
 | `project-owned`        | requires a declared project file and removes native `data.json`                                            |
 | `losslessly-projected` | generates native `data.json` through a named adapter; the CLI supplies the supported adapters listed below |
 
+A `losslessly-projected` record names its source through `settings.source`, unless its adapter reads the settings file of its tool. That file has a fixed place under the [command-line conventions](https://github.com/esther-poniatowski/keystone/blob/main/docs/internals/cli-conventions.md): `config/tools/<tool>.yml` or `<tool>.yml` at the root. The record then names no source, and two files at both places stop the command with an error that names both.
+
 A plugin may also declare root-level `mutable_json_files`. A declared file may be absent. When present, its path must have a lowercase JSON filename, and its content must remain valid JSON. Names must be unique, sorted and distinct from the bundle files, the settings file and the development marker. Other mutable file types and directories are unsupported, and undeclared entries fail reconciliation.
 
 The command-line interface supplies three settings adapters:
 
-| Adapter                           | Source contract                                                   |
-| --------------------------------- | ----------------------------------------------------------------- |
-| `ekphrasis@1`                     | portable schema-registry path, path rules and commit delay        |
-| `full-calendar-remastered@0.13.7` | Tasks calendar, Tasks integration and portable interface choices  |
-| `sieve@1.0.2`                     | project inventory structure and selected stable project identifiers |
+| Adapter                           | Source                                          | Source contract                                                     |
+| --------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------- |
+| `ekphrasis@1`                     | `config/tools/ekphrasis.yml` or `ekphrasis.yml` | portable schema-registry path, path rules and commit delay          |
+| `full-calendar-remastered@0.13.7` | `settings.source`                               | Tasks calendar, Tasks integration and portable interface choices    |
+| `sieve@1.0.2`                     | `settings.source`                               | project inventory structure and selected stable project identifiers |
 
 The [settings-adapter guide](docs/settings-adapters.md) defines the required keys and admitted values of these source files.
 
@@ -98,14 +100,24 @@ The [settings-adapter guide](docs/settings-adapters.md) defines the required key
 The `apply` command builds and verifies a candidate before it changes the target vault:
 
 ```sh
-kataskeue apply --vault PATH --record PATH/obsidian-plugins.yml
+kataskeue apply
 ```
 
 The `check` command compares the current native state with the canonical profile and installation receipt:
 
 ```sh
-kataskeue check --vault PATH --record PATH/obsidian-plugins.yml
+kataskeue check
 ```
+
+Both commands work on the root of a consumer repository. The root is the first of three answers:
+
+1. the option `-r`, `--root PATH`;
+2. the environment variable `KATASKEUE_ROOT`;
+3. the current folder.
+
+Kataskeue has no settings file of its own, so it searches no ancestor folder. The canonical record is `obsidian-plugins.yml` at the root, and the vault is the root, unless the options `--record PATH` and `--vault PATH` name others. A path given on the command line is relative to the current folder. A path written in the record or in a local record is relative to the root.
+
+`apply` regenerates the managed plugin state of the vault, `.obsidian/plugins/` and `community-plugins.json`, from the record, so it overwrites that state without `--force`. The option `-v`, `--version` prints the version of the tool. The exit status is 0 on success and 1 when `check` finds a drift or a command fails. It is 2 on a usage error or an invalid input: an unknown option, a missing or invalid record, or an unusable settings source.
 
 An untracked override file may select a local build. The selected plugin must also occur in the profile.
 
@@ -114,13 +126,10 @@ sample-plugin:
   path: ../../plugins/sample-plugin
 ```
 
-Relative override paths resolve from the directory containing the canonical record. The `source` paths used by `project-owned` and `losslessly-projected` settings follow the same rule.
+Relative override paths resolve from the root. The `source` paths used by `project-owned` and `losslessly-projected` settings follow the same rule.
 
 ```sh
-kataskeue apply \
-  --vault PATH \
-  --record PATH/obsidian-plugins.yml \
-  --local-override PATH/obsidian-plugins.local.yml
+kataskeue apply --local-override obsidian-plugins.local.yml
 ```
 
 Pass the same override to `check` when checking the local build. The delivery flag `--delivery` rejects every local override.
@@ -132,13 +141,10 @@ sieve:
   source: config/obsidian/sieve.local.yml
 ```
 
-Local settings paths use the canonical record directory as their root. Source paths use the same root. The following command selects the local record:
+Local settings paths resolve from the root, as source paths do. The following command selects the local record:
 
 ```sh
-kataskeue apply \
-  --vault PATH \
-  --record PATH/obsidian-plugins.yml \
-  --local-settings PATH/obsidian-plugin-settings.local.yml
+kataskeue apply --local-settings obsidian-plugin-settings.local.yml
 ```
 
 Pass the same local-settings record to `check`. The materializer reads exactly one source. A local source replaces the canonical source in full. The delivery flag `--delivery` rejects local builds and local settings sources.
@@ -150,11 +156,10 @@ Each command holds `.kataskeue.lock` for the complete check or change. A normal 
 The `check` command can write its result as a SARIF 2.1.0 log, in the findings profile of the gate [Elenchos](https://github.com/esther-poniatowski/elenchos):
 
 ```sh
-kataskeue check --vault PATH --record PATH/obsidian-plugins.yml \
-  --format sarif --output build/kataskeue.sarif --root .
+kataskeue check --format sarif --output build/kataskeue.sarif
 ```
 
-The log states every path relative to `--root`. The root defaults to the current folder. A drift yields one result, located at the file or folder that drifted. The check stops at its first drift, so the run declares itself incomplete. The [findings output](docs/adr/findings-output.md) lists the rules and their locations.
+The log states every path relative to the root, and the vault must lie under the root. A drift yields one result, located at the file or folder that drifted. The check stops at its first drift, so the run declares itself incomplete. The [findings output](docs/adr/findings-output.md) lists the rules and their locations.
 
 ## Recovery from drift
 
@@ -170,7 +175,7 @@ In that case, the launcher cache holds a damaged copy of the release. Earlier re
 
 ```sh
 rm -rf "${OBSIDIAN_CACHE:-$HOME/.obsidian-cache}/obsidian-plugins/<owner>/<repository>/<tag>"
-kataskeue apply --vault PATH --record PATH/obsidian-plugins.yml
+kataskeue apply
 ```
 
 A vault materialized before the private copies may still share files with the cache. Run `apply` once to replace them by private copies.

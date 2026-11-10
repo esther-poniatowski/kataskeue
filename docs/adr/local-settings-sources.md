@@ -10,7 +10,7 @@ A consumer may need another complete settings source for one checkout. The canon
 
 The commands accept a separate untracked local-settings record through the flag `--local-settings`. The record maps a plugin identifier to a repository-relative source path. The plugin must use the `losslessly-projected` policy.
 
-The selected local source replaces the complete canonical source. The materializer never merges the two sources. Paths resolve from the canonical profile directory. Therefore, `apply` and `check` select the same files when they receive the same local record.
+The selected local source replaces the complete canonical source. The materializer never merges the two sources. Paths resolve from the root of the consumer repository. Therefore, `apply` and `check` select the same files when they receive the same local record.
 
 The receipt records whether each projected source is canonical or local. Delivery mode rejects every local build override and local settings source. During `check`, the adapter regenerates the expected native file from the selected source and its declared repository inputs.
 
