@@ -4,6 +4,7 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import * as z from "zod";
 
 import type { PluginRecord } from "../../domain/profile.js";
+import { requireFileFormat } from "../../domain/fileFormat.js";
 import { ProfileError } from "../../errors.js";
 import type {
   SettingsAdapter,
@@ -29,9 +30,12 @@ const pathRuleSchema = z
   })
   .strict();
 
+/** Identifier that the source file declares in `_schema`. */
+const SOURCE_FORMAT = "ekphrasis:configuration@1";
+
 const sourceSchema = z
   .object({
-    format_version: z.literal(1),
+    _schema: z.literal(SOURCE_FORMAT),
     schema_registry: literalRootPathSchema,
     path_rules: z.array(pathRuleSchema),
     commit_delay: z.number().int().nonnegative(),
@@ -57,12 +61,16 @@ export class EkphrasisSettingsAdapter implements SettingsAdapter {
     destination: string,
     context: SettingsProjectionContext,
   ): Promise<void> {
-    const parsed = sourceSchema.safeParse(
-      parseSettingsSource(
-        await readFile(source, "utf8"),
-        "Ekphrasis settings source",
-      ),
+    const content = parseSettingsSource(
+      await readFile(source, "utf8"),
+      "Ekphrasis settings source",
     );
+    requireFileFormat(
+      content,
+      SOURCE_FORMAT,
+      `Ekphrasis configuration file ${source}`,
+    );
+    const parsed = sourceSchema.safeParse(content);
     if (!parsed.success) {
       throw new ProfileError(
         `invalid Ekphrasis settings: ${parsed.error.issues

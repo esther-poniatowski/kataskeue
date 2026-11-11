@@ -8,6 +8,7 @@ import {
   runtimeSchema,
   sha256Schema,
 } from "../domain/profile.js";
+import { requireFileFormat } from "../domain/fileFormat.js";
 import { DriftError } from "../errors.js";
 
 const receiptSettingsSchema = z
@@ -62,9 +63,12 @@ const omittedPluginSchema = z
   })
   .strict();
 
+/** Identifier that the installation receipt declares in `_schema`. */
+export const RECEIPT_FORMAT = "kataskeue:receipt@2";
+
 export const installationReceiptSchema = z
   .object({
-    format_version: z.literal(2),
+    _schema: z.literal(RECEIPT_FORMAT),
     profile_digest: sha256Schema,
     runtime: runtimeSchema,
     plugins: z.array(receiptPluginSchema),
@@ -81,6 +85,7 @@ export type InstallationReceipt = Readonly<
 
 /** Parse an installation receipt before using it to inspect native state. */
 export function parseInstallationReceipt(value: unknown): InstallationReceipt {
+  requireFileFormat(value, RECEIPT_FORMAT, "installation receipt");
   const result = installationReceiptSchema.safeParse(value);
   if (!result.success) {
     const details = result.error.issues

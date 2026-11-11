@@ -46,3 +46,22 @@ The check route uses the same authority boundary:
 Each comparison of the check runs as a step. A step applies one rule to one file or folder of the vault. An injected cursor records the step in progress. Therefore, the command line locates the first drift, and the error classes stay unchanged. The [findings output](adr/findings-output.md) fixes the rules and the location of each.
 
 Release files and mutable plugin state remain separate. Release files have canonical digests. A declared mutable JSON file may change after installation, but it must remain valid JSON at its exact lowercase root-level path. Undeclared files, directories, symbolic links and other mutable file types fail verification.
+
+## File formats
+
+Each versioned file declares its format in the key `_schema`, as its first key:
+
+| File                                    | Written by     | `_schema`                       |
+| --------------------------------------- | -------------- | ------------------------------- |
+| canonical record `obsidian-plugins.yml` | the researcher | `kataskeue:obsidian-plugins@1`  |
+| installation receipt                    | `apply`        | `kataskeue:receipt@2`           |
+| transaction journal                     | `apply`        | `kataskeue:transaction@1`       |
+| source of the `sieve@1.0.2` adapter     | the researcher | `sieve:configuration@1`         |
+| source of the Full Calendar adapter     | the researcher | `full-calendar:configuration@1` |
+| `ekphrasis.yml`                         | the researcher | `ekphrasis:configuration@1`     |
+
+The canonical record is not a configuration file of Kataskeue, because the command reads it from `--record` or from the root, and no configuration lookup finds it. Therefore, its type is `obsidian-plugins`.
+
+The reader compares the whole value with the one identifier that it supports. A command stops with status 2 when the key is absent, when the key holds another value, or when the file keeps the retired key `format_version`, in the text output and in the findings log alike. The message names the expected value. Such a file is an unusable input and not a drift of the vault, so the findings log records a failed run and no result.
+
+The receipt and the journal record what a past run of `apply` did, so no command reconstructs them from the current state. Therefore, `check` rejects a receipt that keeps the retired key. The command `apply` replaces the whole managed state and writes a new receipt without reading the previous one. The receipt holds digests of the record and of the source files, so editing its key by hand does not make it valid once those files declare `_schema`: `apply` is the route to a current receipt.

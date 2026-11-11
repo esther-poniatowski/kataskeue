@@ -22,7 +22,7 @@ import {
 import { LauncherBundleProvider } from "./infrastructure/launcherBundleProvider.js";
 import { GitOverrideInspector } from "./infrastructure/gitOverrideInspector.js";
 import { ObsidianLauncherInstaller } from "./infrastructure/obsidianLauncherInstaller.js";
-import { ProfileError } from "./errors.js";
+import { FileFormatError, ProfileError } from "./errors.js";
 import { createSettingsAdapters } from "./infrastructure/settings/settingsAdapters.js";
 import { pathWithin, sarifLog } from "./infrastructure/sarifLog.js";
 
@@ -237,7 +237,11 @@ async function main(argv: readonly string[]): Promise<void> {
  * drift found by the check or a failure of the command.
  */
 function exitStatus(error: unknown): number {
-  if (error instanceof UsageError || error instanceof ProfileError) {
+  if (
+    error instanceof UsageError ||
+    error instanceof ProfileError ||
+    error instanceof FileFormatError
+  ) {
     return EXIT.usage;
   }
   return EXIT.problem;

@@ -8,6 +8,7 @@ import {
   resolve,
 } from "node:path";
 
+import { requireFileFormat } from "../domain/fileFormat.js";
 import { ReplacementError } from "../errors.js";
 import type { ReplaceOperations } from "../ports.js";
 
@@ -18,8 +19,11 @@ const managedNames = [
 ] as const;
 type ManagedName = (typeof managedNames)[number];
 
+/** Identifier that the transaction journal declares in `_schema`. */
+const JOURNAL_FORMAT = "kataskeue:transaction@1";
+
 interface TransactionJournal {
-  readonly format_version: 1;
+  readonly _schema: typeof JOURNAL_FORMAT;
   readonly transaction_root: string;
   readonly target_obsidian: string;
   readonly phase: "replacing" | "verified";
@@ -55,7 +59,7 @@ export async function replaceManagedState(
     ),
   ) as Record<ManagedName, boolean>;
   let journal: TransactionJournal = {
-    format_version: 1,
+    _schema: JOURNAL_FORMAT,
     transaction_root: resolve(transactionRoot),
     target_obsidian: resolve(targetObsidian),
     phase: "replacing",
@@ -105,9 +109,13 @@ export async function recoverIncompleteTransaction(
   if (!(await exists(journalPath))) {
     return false;
   }
-  const journal = JSON.parse(
-    await readFile(journalPath, "utf8"),
-  ) as TransactionJournal;
+  const content: unknown = JSON.parse(await readFile(journalPath, "utf8"));
+  requireFileFormat(
+    content,
+    JOURNAL_FORMAT,
+    `transaction journal ${journalPath}`,
+  );
+  const journal = content as TransactionJournal;
   validateJournal(vault, journal);
   if (journal.phase === "verified") {
     await rm(journal.transaction_root, { recursive: true, force: true });
@@ -142,7 +150,6 @@ async function rollbackJournal(
 function validateJournal(vault: string, journal: TransactionJournal): void {
   const transactionRelative = relative(vault, journal.transaction_root);
   if (
-    journal.format_version !== 1 ||
     (journal.phase !== "replacing" && journal.phase !== "verified") ||
     !isAbsolute(journal.transaction_root) ||
     transactionRelative.startsWith("..") ||

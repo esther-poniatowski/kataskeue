@@ -9,6 +9,8 @@ The [command-line conventions](https://github.com/esther-poniatowski/keystone/bl
 
 The local-settings flag `--local-settings` may select a complete local source. The local record maps a plugin identifier to one source path. The adapter reads either that source or the canonical source. Both paths resolve from the root of the consumer repository. Delivery mode rejects every active local source.
 
+Each source declares its format in the key `_schema`, as its first key, and the [file formats](architecture.md#file-formats) state what the adapter does with it. The adapter reads this key and does not copy it into the native `data.json`.
+
 During `check`, each adapter regenerates its expected native file. Therefore, the check detects changes in inputs read beside the source file.
 
 ## Ekphrasis
@@ -16,7 +18,7 @@ During `check`, each adapter regenerates its expected native file. Therefore, th
 The adapter identifier `ekphrasis@1` reads the settings file of Ekphrasis, `config/tools/ekphrasis.yml` or `ekphrasis.yml` at the root. It accepts the source below:
 
 ```yaml
-format_version: 1
+_schema: ekphrasis:configuration@1
 schema_registry: specs/schema-registry.yml
 path_rules:
   - pattern: projects/**/project.yml
@@ -31,7 +33,7 @@ The registry path and each rule path are relative to the root, wherever the file
 The adapter identifier `full-calendar-remastered@0.13.7` accepts the source below:
 
 ```yaml
-format_version: 1
+_schema: full-calendar:configuration@1
 calendar_source:
   id: tasks_1
   name: Obsidian Tasks
@@ -59,7 +61,7 @@ The adapter writes the complete settings file for plugin release 0.13.7. Externa
 The adapter identifier `sieve@1.0.2` accepts this source shape:
 
 ```yaml
-format_version: 1
+_schema: sieve:configuration@1
 projects_root: projects
 specification_file: project.yml
 selected_project_ids:

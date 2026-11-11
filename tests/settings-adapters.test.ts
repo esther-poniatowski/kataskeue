@@ -16,7 +16,7 @@ test("projects the complete Ekphrasis native settings", async () => {
   await writeFile(
     source,
     [
-      "format_version: 1",
+      "_schema: ekphrasis:configuration@1",
       "schema_registry: specs/schema-registry.yml",
       "path_rules:",
       "  - pattern: projects/**/project.yml",
@@ -48,7 +48,7 @@ test("projects the Full Calendar Tasks workflow without credentials", async () =
   await writeFile(
     source,
     [
-      "format_version: 1",
+      "_schema: full-calendar:configuration@1",
       "calendar_source:",
       "  id: tasks_1",
       "  name: Obsidian Tasks",
@@ -155,7 +155,7 @@ test("writes the root-relative Ekphrasis paths as vault paths", async () => {
   await writeFile(
     source,
     [
-      "format_version: 1",
+      "_schema: ekphrasis:configuration@1",
       "schema_registry: specs/schema-registry.yml",
       "path_rules:",
       '  - pattern: "**/{glossary,*.glossary}.yml"',
@@ -199,7 +199,7 @@ test("rejects malformed adapter sources and nonportable Ekphrasis paths", async 
   await writeFile(
     escaping,
     [
-      "format_version: 1",
+      "_schema: ekphrasis:configuration@1",
       "schema_registry: ../outside.yml",
       "path_rules: []",
       "commit_delay: 1000",
@@ -222,7 +222,7 @@ test("rejects an invalid Full Calendar display time zone", async () => {
   await writeFile(
     source,
     [
-      "format_version: 1",
+      "_schema: full-calendar:configuration@1",
       "calendar_source:",
       "  id: tasks_1",
       "  name: Obsidian Tasks",
@@ -259,7 +259,7 @@ test("projects exact Sieve rules for unselected project directories", async () =
   await writeFile(
     source,
     [
-      "format_version: 1",
+      "_schema: sieve:configuration@1",
       "projects_root: projects",
       "specification_file: project.yml",
       "selected_project_ids:",
@@ -287,7 +287,7 @@ test("projects empty Sieve rules when every project is selected", async () => {
   await writeFile(
     source,
     [
-      "format_version: 1",
+      "_schema: sieve:configuration@1",
       "projects_root: projects",
       "specification_file: project.yml",
       "selected_project_ids:",
@@ -316,7 +316,7 @@ test("rejects duplicate Sieve project identifiers", async () => {
   await writeFile(
     source,
     [
-      "format_version: 1",
+      "_schema: sieve:configuration@1",
       "projects_root: projects",
       "specification_file: project.yml",
       "selected_project_ids:",
@@ -341,7 +341,7 @@ test("rejects a selected identifier absent from the project inventory", async ()
   await writeFile(
     source,
     [
-      "format_version: 1",
+      "_schema: sieve:configuration@1",
       "projects_root: projects",
       "specification_file: project.yml",
       "selected_project_ids:",
@@ -371,7 +371,7 @@ test("rejects duplicate and unsorted selected project identifiers", async () => 
     await writeFile(
       source,
       [
-        "format_version: 1",
+        "_schema: sieve:configuration@1",
         "projects_root: projects",
         "specification_file: project.yml",
         "selected_project_ids:",
@@ -403,7 +403,7 @@ test("rejects unsafe project directories and malformed specifications", async ()
     await writeFile(
       source,
       [
-        "format_version: 1",
+        "_schema: sieve:configuration@1",
         "projects_root: projects",
         "specification_file: project.yml",
         "selected_project_ids: []",

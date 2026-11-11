@@ -3,6 +3,11 @@ export class ProfileError extends Error {
   override readonly name = "ProfileError";
 }
 
+/** A file declares no `_schema`, or another identifier than its reader supports. */
+export class FileFormatError extends Error {
+  override readonly name = "FileFormatError";
+}
+
 /** A provider proved that the selected remote bundle does not exist. */
 export class BundleNotFoundError extends Error {
   override readonly name = "BundleNotFoundError";

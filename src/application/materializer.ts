@@ -52,7 +52,7 @@ import type {
   ReceiptPlugin,
   ReceiptSettings,
 } from "./receipt.js";
-import { parseInstallationReceipt } from "./receipt.js";
+import { parseInstallationReceipt, RECEIPT_FORMAT } from "./receipt.js";
 import {
   CheckCursor,
   fileStep,
@@ -249,7 +249,7 @@ async function applyProfileLocked(
     }
 
     const receipt: InstallationReceipt = {
-      format_version: 2,
+      _schema: RECEIPT_FORMAT,
       profile_digest: profileDigest(options.profile),
       runtime: options.profile.runtime,
       plugins: receiptPlugins,

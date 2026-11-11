@@ -3,14 +3,18 @@ import { readFile, writeFile } from "node:fs/promises";
 import * as z from "zod";
 
 import type { PluginRecord } from "../../domain/profile.js";
+import { requireFileFormat } from "../../domain/fileFormat.js";
 import { ProfileError } from "../../errors.js";
 import type { SettingsAdapter } from "../../ports.js";
 import { parseSettingsSource } from "./parseSettingsSource.js";
 
 const dateTargetSchema = z.enum(["scheduledDate", "startDate", "dueDate"]);
+/** Identifier that the source file declares in `_schema`. */
+const SOURCE_FORMAT = "full-calendar:configuration@1";
+
 const sourceSchema = z
   .object({
-    format_version: z.literal(1),
+    _schema: z.literal(SOURCE_FORMAT),
     calendar_source: z
       .object({
         id: z.string().min(1),
@@ -50,12 +54,16 @@ export class FullCalendarRemasteredSettingsAdapter implements SettingsAdapter {
   }
 
   async project(source: string, destination: string): Promise<void> {
-    const parsed = sourceSchema.safeParse(
-      parseSettingsSource(
-        await readFile(source, "utf8"),
-        "Full Calendar settings source",
-      ),
+    const content = parseSettingsSource(
+      await readFile(source, "utf8"),
+      "Full Calendar settings source",
     );
+    requireFileFormat(
+      content,
+      SOURCE_FORMAT,
+      `Full Calendar configuration file ${source}`,
+    );
+    const parsed = sourceSchema.safeParse(content);
     if (!parsed.success) {
       throw new ProfileError(
         `invalid Full Calendar settings: ${parsed.error.issues

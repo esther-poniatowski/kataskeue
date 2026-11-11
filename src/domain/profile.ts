@@ -1,6 +1,7 @@
 import * as z from "zod";
 
 import { ProfileError } from "../errors.js";
+import { requireFileFormat } from "./fileFormat.js";
 
 export const runtimeFileNames = [
   "manifest.json",
@@ -140,10 +141,13 @@ export const runtimeSchema = z
   })
   .strict();
 
+/** Identifier that the canonical record declares in `_schema`. */
+export const PROFILE_FORMAT = "kataskeue:obsidian-plugins@1";
+
 /** Executable source of the canonical profile contract. */
 export const pluginProfileSchema = z
   .object({
-    format_version: z.literal(1),
+    _schema: z.literal(PROFILE_FORMAT),
     runtime: runtimeSchema,
     plugins: z.array(pluginSchema),
   })
@@ -179,6 +183,7 @@ export type LocalOverrides = Readonly<Record<string, LocalOverride>>;
 
 /** Parse the profile through the executable canonical schema. */
 export function parseProfile(value: unknown): PluginProfile {
+  requireFileFormat(value, PROFILE_FORMAT, "plugin profile");
   return parseWithSchema(pluginProfileSchema, value, "invalid plugin profile");
 }
 

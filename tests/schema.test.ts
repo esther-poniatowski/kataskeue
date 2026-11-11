@@ -18,6 +18,22 @@ test("publishes representable constraints and names executable-only constraints"
   assert.match(text, /identifier-order/);
 });
 
+test("requires the identifier of the record in _schema", async () => {
+  const schema = JSON.parse(
+    await readFile("schemas/obsidian-plugins.schema.json", "utf8"),
+  ) as {
+    properties: Record<string, { const?: string }>;
+    required: string[];
+  };
+  assert.equal(Object.keys(schema.properties)[0], "_schema");
+  assert.equal(
+    schema.properties._schema?.const,
+    "kataskeue:obsidian-plugins@1",
+  );
+  assert.ok(schema.required.includes("_schema"));
+  assert.equal("format_version" in schema.properties, false);
+});
+
 function collectRepositoryPatterns(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.flatMap(collectRepositoryPatterns);

@@ -9,7 +9,7 @@ const digest = "a".repeat(64);
 
 test("parses a canonical profile", () => {
   const profile = parseProfile({
-    format_version: 1,
+    _schema: "kataskeue:obsidian-plugins@1",
     runtime: {
       minimum_obsidian: "1.0.0",
       checked_obsidian: "1.14.5",
@@ -34,7 +34,7 @@ test("rejects an enabled optional plugin", () => {
   assert.throws(
     () =>
       parseProfile({
-        format_version: 1,
+        _schema: "kataskeue:obsidian-plugins@1",
         runtime: {
           minimum_obsidian: "1.0.0",
           checked_obsidian: "1.14.5",
@@ -79,7 +79,7 @@ test("rejects non-HTTPS repositories, duplicate identifiers, and identifier diso
     assert.throws(
       () =>
         parseProfile({
-          format_version: 1,
+          _schema: "kataskeue:obsidian-plugins@1",
           runtime: {
             minimum_obsidian: "1.0.0",
             checked_obsidian: "1.14.5",
@@ -103,7 +103,7 @@ test("rejects identifiers and settings paths that can escape their roots", () =>
     assert.throws(
       () =>
         parseProfile({
-          format_version: 1,
+          _schema: "kataskeue:obsidian-plugins@1",
           runtime: {
             minimum_obsidian: "1.0.0",
             checked_obsidian: "1.14.5",
@@ -146,7 +146,7 @@ test("accepts only sorted, unique, unreserved mutable JSON file names", () => {
     assert.throws(
       () =>
         parseProfile({
-          format_version: 1,
+          _schema: "kataskeue:obsidian-plugins@1",
           runtime: {
             minimum_obsidian: "1.0.0",
             checked_obsidian: "1.14.5",
@@ -161,7 +161,7 @@ test("accepts only sorted, unique, unreserved mutable JSON file names", () => {
 
 test("rejects an override absent from the canonical profile", () => {
   const profile = parseProfile({
-    format_version: 1,
+    _schema: "kataskeue:obsidian-plugins@1",
     runtime: {
       minimum_obsidian: "1.0.0",
       checked_obsidian: "1.14.5",
@@ -177,7 +177,7 @@ test("rejects an override absent from the canonical profile", () => {
 
 test("accepts local sources only for projected settings", () => {
   const projected = parseProfile({
-    format_version: 1,
+    _schema: "kataskeue:obsidian-plugins@1",
     runtime: {
       minimum_obsidian: "1.0.0",
       checked_obsidian: "1.14.5",

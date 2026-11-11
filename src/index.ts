@@ -26,6 +26,7 @@ export {
   BundleNotFoundError,
   DigestMismatchError,
   DriftError,
+  FileFormatError,
   OperationLockedError,
   ProfileError,
   ProviderUnsupportedError,

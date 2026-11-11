@@ -11,6 +11,7 @@ import { isAbsolute, relative, resolve } from "node:path";
 import * as z from "zod";
 
 import type { PluginRecord } from "../../domain/profile.js";
+import { requireFileFormat } from "../../domain/fileFormat.js";
 import { ProfileError } from "../../errors.js";
 import type {
   SettingsAdapter,
@@ -41,9 +42,12 @@ const selectedProjectIdsSchema = z
     }
   });
 
+/** Identifier that the source file declares in `_schema`. */
+const SOURCE_FORMAT = "sieve:configuration@1";
+
 const sourceSchema = z
   .object({
-    format_version: z.literal(1),
+    _schema: z.literal(SOURCE_FORMAT),
     projects_root: portablePathSchema,
     specification_file: portableNameSchema,
     selected_project_ids: selectedProjectIdsSchema,
@@ -75,12 +79,16 @@ export class SieveSettingsAdapter implements SettingsAdapter {
     destination: string,
     context: SettingsProjectionContext,
   ): Promise<void> {
-    const parsed = sourceSchema.safeParse(
-      parseSettingsSource(
-        await readFile(source, "utf8"),
-        "Sieve settings source",
-      ),
+    const content = parseSettingsSource(
+      await readFile(source, "utf8"),
+      "Sieve settings source",
     );
+    requireFileFormat(
+      content,
+      SOURCE_FORMAT,
+      `Sieve configuration file ${source}`,
+    );
+    const parsed = sourceSchema.safeParse(content);
     if (!parsed.success) {
       throw new ProfileError(
         `invalid Sieve settings: ${parsed.error.issues

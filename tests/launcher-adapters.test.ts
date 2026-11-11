@@ -20,7 +20,7 @@ import { ObsidianLauncherInstaller } from "../src/infrastructure/obsidianLaunche
 
 const digest = "a".repeat(64);
 const release = parseProfile({
-  format_version: 1,
+  _schema: "kataskeue:obsidian-plugins@1",
   runtime: {
     minimum_obsidian: "1.0.0",
     checked_obsidian: "1.14.5",

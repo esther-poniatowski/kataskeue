@@ -31,6 +31,7 @@ import {
   BundleNotFoundError,
   DigestMismatchError,
   DriftError,
+  FileFormatError,
   OperationLockedError,
   ProfileError,
   ProviderUnsupportedError,
@@ -310,7 +311,7 @@ test("recovers a durable journal after process interruption", async () => {
   await writeFile(
     join(fixture.vault, ".kataskeue-transaction.json"),
     `${JSON.stringify({
-      format_version: 1,
+      _schema: "kataskeue:transaction@1",
       transaction_root: transaction,
       target_obsidian: join(fixture.vault, ".obsidian"),
       phase: "replacing",
@@ -416,16 +417,18 @@ test("parses receipt versions and verifies canonical source kinds", async () => 
     "plugin-installation.json",
   );
   const receipt = JSON.parse(await readFile(receiptPath, "utf8")) as {
-    format_version: number;
+    _schema: string;
     plugins: Array<{ source: string }>;
   };
-  receipt.format_version = 1;
+  assert.equal(Object.keys(receipt)[0], "_schema");
+  assert.equal(receipt._schema, "kataskeue:receipt@2");
+  receipt._schema = "kataskeue:receipt@1";
   await writeFile(receiptPath, `${JSON.stringify(receipt)}\n`);
   await assert.rejects(
     checkProfile({ vault: fixture.vault, profile: fixture.profile }),
-    DriftError,
+    FileFormatError,
   );
-  receipt.format_version = 2;
+  receipt._schema = "kataskeue:receipt@2";
   receipt.plugins[0]!.source = "artifact";
   await writeFile(receiptPath, `${JSON.stringify(receipt)}\n`);
   await assert.rejects(
@@ -899,7 +902,7 @@ test("reports a failure before the first step as a failed check", async () => {
   const cursor = new CheckCursor();
   const invalid = {
     ...fixture.profile,
-    format_version: 99,
+    _schema: "kataskeue:obsidian-plugins@99",
   } as unknown as PluginProfile;
   const outcome = await observeCheck(
     () => checkProfile({ vault: fixture.vault, profile: invalid }, { cursor }),
@@ -974,7 +977,7 @@ async function createFixture(options: FixtureOptions = {}): Promise<{
   const bundle = await createBundle(main);
   const requirement = options.requirement ?? "required";
   const profile = parseProfile({
-    format_version: 1,
+    _schema: "kataskeue:obsidian-plugins@1",
     runtime: {
       minimum_obsidian: "1.0.0",
       checked_obsidian: "1.14.5",

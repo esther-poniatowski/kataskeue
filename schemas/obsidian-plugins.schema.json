@@ -4,9 +4,9 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
-    "format_version": {
-      "type": "number",
-      "const": 1
+    "_schema": {
+      "type": "string",
+      "const": "kataskeue:obsidian-plugins@1"
     },
     "runtime": {
       "type": "object",
@@ -410,7 +410,7 @@
     }
   },
   "required": [
-    "format_version",
+    "_schema",
     "runtime",
     "plugins"
   ],

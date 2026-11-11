@@ -40,7 +40,7 @@ The command pins npm 12.2.1 for two reasons. npm 10 cannot build a Git package w
 The [generated schema](schemas/obsidian-plugins.schema.json) defines the record structure. The executable parser additionally requires unique, sorted plugin identifiers. This minimal profile selects one required public release:
 
 ```yaml
-format_version: 1
+_schema: kataskeue:obsidian-plugins@1
 runtime:
   minimum_obsidian: 1.0.0
   checked_obsidian: 1.14.5
@@ -60,7 +60,7 @@ plugins:
       policy: machine-local
 ```
 
-Replace the example values with 64-character lowercase hexadecimal digests. Compute each digest with the 256-bit Secure Hash Algorithm. Plugin identifiers must be unique and sorted. An optional plugin must remain disabled.
+The first key `_schema` declares the format of the record, and the [file formats](docs/architecture.md#file-formats) state what a reader does with it. Replace the example values with 64-character lowercase hexadecimal digests. Compute each digest with the 256-bit Secure Hash Algorithm. Plugin identifiers must be unique and sorted. An optional plugin must remain disabled.
 
 Three fields identify the Obsidian releases checked against the profile:
 
