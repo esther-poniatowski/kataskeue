@@ -205,6 +205,10 @@ Remote releases and retained artifacts enter through a provider. Local builds en
 | retained artifact     | provider interface; immutable artifact implementation pending |
 | local build           | untracked override mapped to a declared plugin identifier     |
 
+## Schema registry
+
+The [schema registry](specs/schema-registry.yml) maps each format whose schema Kataskeue ships to that schema file. Kleisis generates the registry from the [resource record](specs/schema-resources.yml): run `kleisis materialize --root .` after a schema changes, and `kleisis check --root .` to confirm that the registry is current. A repository whose files declare a Kataskeue format names Kataskeue as a dependency in its own resource record, at a pinned commit, so that Ekphrasis validates those files in Obsidian.
+
 ## Documentation
 
 The following notes define the package boundary and its implementation route:

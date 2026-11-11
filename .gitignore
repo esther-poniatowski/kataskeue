@@ -4,3 +4,6 @@ coverage/
 *.log
 .DS_Store
 .agent-tmp/
+
+# State of Kleisis: the materialized schema closure and the staging folders
+.kleisis/

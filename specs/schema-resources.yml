@@ -1,0 +1,8 @@
+# Inputs of the schema closure of kataskeue; generated files remain outside this record.
+_schema: kleisis:schema-resources@2
+
+paths:
+  owned_schemas: schemas
+
+exports:
+  - kataskeue:obsidian-plugins@1
