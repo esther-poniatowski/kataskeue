@@ -103,7 +103,7 @@ test("takes the state folder from --state-dir, relative to the current folder", 
   const lock = join(vault, "state", "vault.lock");
   await writeFile(lock, `${JSON.stringify({ pid: 1, token: "held" })}\n`);
   const held = run(["check", "--state-dir", "state"], { cwd: vault });
-  assert.equal(held.status, 1);
+  assert.equal(held.status, 3);
   assert.ok(held.stderr.includes(lock));
   assert.equal(run(["check"], { cwd: vault }).status, 1);
   assert.ok((await readdir(vault)).includes(".kataskeue"));

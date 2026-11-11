@@ -22,7 +22,12 @@ import {
 import { LauncherBundleProvider } from "./infrastructure/launcherBundleProvider.js";
 import { GitOverrideInspector } from "./infrastructure/gitOverrideInspector.js";
 import { ObsidianLauncherInstaller } from "./infrastructure/obsidianLauncherInstaller.js";
-import { FileFormatError, ProfileError, StateFolderError } from "./errors.js";
+import {
+  FileFormatError,
+  OperationLockedError,
+  ProfileError,
+  StateFolderError,
+} from "./errors.js";
 import { createSettingsAdapters } from "./infrastructure/settings/settingsAdapters.js";
 import { pathWithin, sarifLog } from "./infrastructure/sarifLog.js";
 
@@ -38,7 +43,7 @@ class UsageError extends Error {
 }
 
 /** Exit statuses of the command-line conventions of the workspace. */
-const EXIT = { problem: 1, usage: 2 } as const;
+const EXIT = { problem: 1, usage: 2, environment: 3 } as const;
 
 interface Inputs {
   readonly vault: string;
@@ -254,6 +259,8 @@ function exitStatus(error: unknown): number {
   ) {
     return EXIT.usage;
   }
+  // A held lock is an environment that prevents the command, to repair before a new attempt.
+  if (error instanceof OperationLockedError) return EXIT.environment;
   return EXIT.problem;
 }
 

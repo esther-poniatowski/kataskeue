@@ -117,7 +117,7 @@ Both commands work on the root of a consumer repository. The root is the first o
 
 Kataskeue has no configuration file of its own, so it searches no ancestor folder. The canonical record is `obsidian-plugins.yml` at the root, and the vault is the root, unless the options `--record PATH` and `--vault PATH` name others. A path given on the command line is relative to the current folder. A path written in the record or in a local record is relative to the root.
 
-`apply` regenerates the managed plugin state of the vault, `.obsidian/plugins/` and `community-plugins.json`, from the record, so it overwrites that state without `--force`. The option `-v`, `--version` prints the version of the tool. The exit status is 0 on success and 1 when `check` finds a drift or a command fails. It is 2 on a usage error or an invalid input: an unknown option, a missing or invalid record, an unusable settings source, or an unusable [state folder](#state-folder).
+`apply` regenerates the managed plugin state of the vault, `.obsidian/plugins/` and `community-plugins.json`, from the record, so it overwrites that state without `--force`. The option `-v`, `--version` prints the version of the tool. The exit status is 0 on success and 1 when `check` finds a drift or a command fails. It is 2 on a usage error or an invalid input: an unknown option, a missing or invalid record, an unusable settings source, or an unusable [state folder](#state-folder). It is 3 when the lock of the vault is held, by a running command or by one that an interruption left behind.
 
 An untracked override file may select a local build. The selected plugin must also occur in the profile.
 
