@@ -1,16 +1,15 @@
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import {
-  basename,
-  dirname,
-  isAbsolute,
-  join,
-  relative,
-  resolve,
-} from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 
 import { requireFileFormat } from "../domain/fileFormat.js";
 import { ReplacementError } from "../errors.js";
 import type { ReplaceOperations } from "../ports.js";
+import {
+  formerPlaces,
+  stateFolderOf,
+  statePlaces,
+  type StatePlaces,
+} from "./stateFolder.js";
 
 const managedNames = [
   "plugins",
@@ -37,15 +36,18 @@ export interface ManagedStateTransaction {
   rollback(): Promise<void>;
 }
 
-/** Replace managed paths while retaining a durable rollback journal. */
+/**
+ * Replace managed paths while retaining a durable rollback journal.
+ *
+ * The journal lies at `journalPath`, in the state folder that also holds `transactionRoot`.
+ */
 export async function replaceManagedState(
   stagedObsidian: string,
   targetObsidian: string,
   transactionRoot: string,
+  journalPath: string,
   operations: ReplaceOperations = defaultOperations,
 ): Promise<ManagedStateTransaction> {
-  const vault = dirname(targetObsidian);
-  const journalPath = journalLocation(vault);
   const backupRoot = join(transactionRoot, "backup");
   await mkdir(backupRoot, { recursive: true });
   await mkdir(targetObsidian, { recursive: true });
@@ -100,12 +102,32 @@ export async function replaceManagedState(
   };
 }
 
-/** Restore a transaction that ended before resulting-state verification. */
+/**
+ * Restore a transaction that ended before resulting-state verification.
+ *
+ * The journal of the state folder (`.kataskeue/` in the vault by default) is recovered, and so is a
+ * journal that an earlier release left at the root of the vault. A run of the current release
+ * recovers the former journal before it writes its own. Therefore, when both exist, the former
+ * journal records the later transaction, and it is rolled back first.
+ */
 export async function recoverIncompleteTransaction(
   vaultPath: string,
+  stateFolder?: string,
 ): Promise<boolean> {
   const vault = resolve(vaultPath);
-  const journalPath = journalLocation(vault);
+  const former = await recoverJournal(vault, formerPlaces(vault));
+  const current = await recoverJournal(
+    vault,
+    statePlaces(stateFolderOf(vault, stateFolder)),
+  );
+  return former || current;
+}
+
+async function recoverJournal(
+  vault: string,
+  places: StatePlaces,
+): Promise<boolean> {
+  const journalPath = places.journal;
   if (!(await exists(journalPath))) {
     return false;
   }
@@ -116,7 +138,7 @@ export async function recoverIncompleteTransaction(
     `transaction journal ${journalPath}`,
   );
   const journal = content as TransactionJournal;
-  validateJournal(vault, journal);
+  validateJournal(vault, places, journal);
   if (journal.phase === "verified") {
     await rm(journal.transaction_root, { recursive: true, force: true });
     await rm(journalPath, { force: true });
@@ -147,25 +169,30 @@ async function rollbackJournal(
   await rm(journalPath, { force: true });
 }
 
-function validateJournal(vault: string, journal: TransactionJournal): void {
-  const transactionRelative = relative(vault, journal.transaction_root);
+/** Require the transaction root in the folder of the journal and the target in the vault. */
+function validateJournal(
+  vault: string,
+  places: StatePlaces,
+  journal: TransactionJournal,
+): void {
+  const root = journal.transaction_root;
   if (
     (journal.phase !== "replacing" && journal.phase !== "verified") ||
-    !isAbsolute(journal.transaction_root) ||
-    transactionRelative.startsWith("..") ||
-    isAbsolute(transactionRelative) ||
-    dirname(journal.transaction_root) !== vault ||
-    !basename(journal.transaction_root).startsWith(".kataskeue-") ||
+    typeof root !== "string" ||
+    !isAbsolute(root) ||
+    dirname(root) !== places.folder ||
+    !root.startsWith(places.transactionPrefix) ||
+    root.length === places.transactionPrefix.length ||
     journal.target_obsidian !== join(vault, ".obsidian")
   ) {
     throw new ReplacementError(
-      "transaction journal contains paths outside the target vault",
+      `transaction journal ${places.journal} contains paths outside its state folder or the target vault`,
     );
   }
   for (const name of managedNames) {
     if (typeof journal.original?.[name] !== "boolean") {
       throw new ReplacementError(
-        "transaction journal has an invalid original-state map",
+        `transaction journal ${places.journal} has an invalid original-state map`,
       );
     }
   }
@@ -178,10 +205,6 @@ async function writeJournal(
   const temporary = `${path}.new`;
   await writeFile(temporary, `${JSON.stringify(journal, null, 2)}\n`);
   await rename(temporary, path);
-}
-
-function journalLocation(vault: string): string {
-  return join(vault, ".kataskeue-transaction.json");
 }
 
 async function exists(path: string): Promise<boolean> {

@@ -8,6 +8,7 @@ import {
   readdir,
   rename,
   rm,
+  stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
@@ -36,6 +37,7 @@ import {
   ProfileError,
   ProviderUnsupportedError,
   ReplacementError,
+  StateFolderError,
 } from "../src/errors.js";
 import type {
   BundleAcquisition,
@@ -218,7 +220,8 @@ test("validates plugin identifiers at the exported apply boundary", async () => 
 
 test("rejects a second command while the vault lock is live", async () => {
   const fixture = await createFixture();
-  const lock = join(fixture.vault, ".kataskeue.lock");
+  const lock = join(fixture.vault, ".kataskeue", "vault.lock");
+  await mkdir(join(fixture.vault, ".kataskeue"));
   await writeFile(
     lock,
     `${JSON.stringify({ pid: process.pid, token: "active" })}\n`,
@@ -238,7 +241,8 @@ test("rejects a second command while the vault lock is live", async () => {
 
 test("does not reclaim a stale vault lock implicitly", async () => {
   const fixture = await createFixture();
-  const lock = join(fixture.vault, ".kataskeue.lock");
+  const lock = join(fixture.vault, ".kataskeue", "vault.lock");
+  await mkdir(join(fixture.vault, ".kataskeue"));
   await writeFile(
     lock,
     `${JSON.stringify({ pid: 2_147_483_647, token: "stale" })}\n`,
@@ -254,6 +258,125 @@ test("does not reclaim a stale vault lock implicitly", async () => {
     OperationLockedError,
   );
   await rm(lock);
+});
+
+test("honours a vault lock left at its former place", async () => {
+  const fixture = await createFixture();
+  const lock = join(fixture.vault, ".kataskeue.lock");
+  await writeFile(
+    lock,
+    `${JSON.stringify({ pid: process.pid, token: "former" })}\n`,
+  );
+  for (const run of [
+    () =>
+      applyProfile(
+        { vault: fixture.vault, profile: fixture.profile },
+        {
+          bundles: new StaticProvider(fixture.bundle),
+          installer: new CopyingInstaller(),
+        },
+      ),
+    () => checkProfile({ vault: fixture.vault, profile: fixture.profile }),
+  ]) {
+    await assert.rejects(run(), (error: unknown) => {
+      assert.ok(error instanceof OperationLockedError);
+      assert.ok(error.message.includes(lock));
+      return true;
+    });
+  }
+  assert.deepEqual(await readdir(join(fixture.vault, ".kataskeue")), []);
+  await rm(lock);
+});
+
+/** Apply the fixture profile and record the state places seen during the replacement. */
+async function applyObservingState(
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+  stateDir?: string,
+): Promise<{ lock: boolean; journal: boolean; destinations: string[] }> {
+  const state = stateDir ?? join(fixture.vault, ".kataskeue");
+  const seen = { lock: false, journal: false, destinations: [] as string[] };
+  await applyProfile(
+    {
+      vault: fixture.vault,
+      profile: fixture.profile,
+      ...(stateDir === undefined ? {} : { stateDir }),
+    },
+    {
+      bundles: new StaticProvider(fixture.bundle),
+      installer: new CopyingInstaller(),
+      replacements: {
+        async move(source: string, destination: string): Promise<void> {
+          seen.lock ||= await present(join(state, "vault.lock"));
+          seen.journal ||= await present(join(state, "transaction.json"));
+          seen.destinations.push(destination);
+          await rename(source, destination);
+        },
+      },
+    },
+  );
+  return seen;
+}
+
+async function present(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+test("keeps the lock, the journal and the transaction roots in .kataskeue/", async () => {
+  const fixture = await createFixture();
+  const seen = await applyObservingState(fixture);
+  assert.equal(seen.lock, true);
+  assert.equal(seen.journal, true);
+  const backup = seen.destinations[0] ?? "";
+  assert.ok(
+    backup.startsWith(join(fixture.vault, ".kataskeue", "transaction-")),
+    backup,
+  );
+  assert.deepEqual(await readdir(join(fixture.vault, ".kataskeue")), []);
+  assert.deepEqual(
+    (await readdir(fixture.vault)).filter((name) =>
+      name.startsWith(".kataskeue"),
+    ),
+    [".kataskeue"],
+  );
+});
+
+test("places the state folder where the option names it", async () => {
+  const fixture = await createFixture();
+  const state = join(fixture.vault, "var", "kataskeue");
+  const seen = await applyObservingState(fixture, state);
+  assert.equal(seen.lock, true);
+  assert.equal(seen.journal, true);
+  const backup = seen.destinations[0] ?? "";
+  assert.ok(backup.startsWith(join(state, "transaction-")), backup);
+  assert.deepEqual(await readdir(state), []);
+  assert.equal(await present(join(fixture.vault, ".kataskeue")), false);
+});
+
+test("rejects a state folder that a rename into .obsidian cannot reach", async () => {
+  const fixture = await createFixture();
+  const run = (stateDir: string) =>
+    applyProfile(
+      { vault: fixture.vault, profile: fixture.profile, stateDir },
+      {
+        bundles: new StaticProvider(fixture.bundle),
+        installer: new CopyingInstaller(),
+      },
+    );
+  const elsewhere = join("/dev", "kataskeue-state-test");
+  await assert.rejects(run(elsewhere), /file system of the vault/);
+  await assert.rejects(run(elsewhere), StateFolderError);
+  assert.equal(await present(elsewhere), false);
+  await assert.rejects(
+    run(join(fixture.vault, ".obsidian", "state")),
+    StateFolderError,
+  );
+  await assert.rejects(run(fixture.vault), StateFolderError);
+  assert.equal(await present(join(fixture.vault, ".obsidian", "state")), false);
 });
 
 test("rolls back a replacement failure", async () => {
@@ -287,9 +410,12 @@ test("rolls back a replacement failure", async () => {
   assert.equal(await readFile(sentinel, "utf8"), "original\n");
 });
 
-test("recovers a durable journal after process interruption", async () => {
-  const fixture = await createFixture();
-  const transaction = join(fixture.vault, ".kataskeue-crash");
+/** Leave the state of a replacement interrupted after its backup, with its journal at `journal`. */
+async function interruptReplacement(
+  vault: string,
+  transaction: string,
+  journal: string,
+): Promise<void> {
   const backup = join(transaction, "backup");
   await mkdir(backup, { recursive: true });
   for (const name of [
@@ -297,23 +423,17 @@ test("recovers a durable journal after process interruption", async () => {
     "community-plugins.json",
     "plugin-installation.json",
   ]) {
-    await rename(join(fixture.vault, ".obsidian", name), join(backup, name));
+    await rename(join(vault, ".obsidian", name), join(backup, name));
   }
-  await mkdir(join(fixture.vault, ".obsidian", "plugins"));
+  await mkdir(join(vault, ".obsidian", "plugins"));
+  await writeFile(join(vault, ".obsidian", "community-plugins.json"), "[]\n");
+  await writeFile(join(vault, ".obsidian", "plugin-installation.json"), "{}\n");
   await writeFile(
-    join(fixture.vault, ".obsidian", "community-plugins.json"),
-    "[]\n",
-  );
-  await writeFile(
-    join(fixture.vault, ".obsidian", "plugin-installation.json"),
-    "{}\n",
-  );
-  await writeFile(
-    join(fixture.vault, ".kataskeue-transaction.json"),
+    journal,
     `${JSON.stringify({
       _schema: "kataskeue:transaction@1",
       transaction_root: transaction,
-      target_obsidian: join(fixture.vault, ".obsidian"),
+      target_obsidian: join(vault, ".obsidian"),
       phase: "replacing",
       original: {
         plugins: true,
@@ -322,10 +442,56 @@ test("recovers a durable journal after process interruption", async () => {
       },
     })}\n`,
   );
+}
+
+test("recovers a durable journal after process interruption", async () => {
+  const fixture = await createFixture();
+  const state = join(fixture.vault, ".kataskeue");
+  await interruptReplacement(
+    fixture.vault,
+    join(state, "transaction-crash"),
+    join(state, "transaction.json"),
+  );
   assert.equal(await recoverIncompleteTransaction(fixture.vault), true);
   assert.deepEqual(await readdir(join(fixture.vault, ".obsidian", "plugins")), [
     "sample-plugin",
   ]);
+  assert.deepEqual(await readdir(state), []);
+});
+
+test("recovers a journal left at its former place before applying", async () => {
+  const fixture = await createFixture();
+  const journal = join(fixture.vault, ".kataskeue-transaction.json");
+  const transaction = join(fixture.vault, ".kataskeue-crash");
+  await writeFile(
+    join(fixture.vault, ".obsidian", "plugins", "sample-plugin", "kept.txt"),
+    "original\n",
+  );
+  await interruptReplacement(fixture.vault, transaction, journal);
+  const kept = join(
+    fixture.vault,
+    ".obsidian",
+    "plugins",
+    "sample-plugin",
+    "kept.txt",
+  );
+  let restoredBeforeReplacement: boolean | undefined;
+  await applyProfile(
+    { vault: fixture.vault, profile: fixture.profile },
+    {
+      bundles: new StaticProvider(fixture.bundle),
+      installer: new CopyingInstaller(),
+      replacements: {
+        async move(source: string, destination: string): Promise<void> {
+          restoredBeforeReplacement ??=
+            (await present(kept)) && !(await present(journal));
+          await rename(source, destination);
+        },
+      },
+    },
+  );
+  assert.equal(restoredBeforeReplacement, true);
+  assert.equal(await present(transaction), false);
 });
 
 test("keeps canonical and override checks distinct", async () => {

@@ -27,6 +27,10 @@ The apply operation proceeds through one ordered route:
 
 The tool never deletes a stale lock automatically. This constraint prevents two commands from reclaiming the same stale lock and then changing one vault concurrently. After an abnormal process exit, an operator removes the lock only after confirming that no materializer command remains active.
 
+The lock, the recovery record and each transaction folder lie in one state folder, `.kataskeue/` in the vault by default; the [state folder](../README.md#state-folder) section lists its files. The state module checks the folder before the lock is acquired. The folder must lie on the file system of `.obsidian/`, since step 7 renames each managed path between a transaction folder and `.obsidian/`. The check runs on the nearest existing ancestor of the folder, so that a rejected folder is never created.
+
+Recovery reads two journals: the journal of the state folder, and a journal that an earlier release left at the root of the vault. Each journal must name a transaction folder inside its own state folder. A run of the current release recovers the former journal before it writes its own journal. Therefore, when both journals exist, the former journal records the later transaction, and recovery rolls it back first.
+
 When a provider confirms a missing bundle, it may omit the corresponding disabled optional plugin. An unsupported provider, a failed login, and another fetch failure leave the bundle status unresolved. Such errors reject the candidate. Required plugins must be present. Differing digests and missing settings adapters also reject the candidate before the vault changes.
 
 The canonical profile determines which plugins must exist. A receipt identifies each bundle source and the canonical or local mode of each projected settings source. The receipt also records the installed digests. These fields permit checks of the installed bytes and governed configuration. The receipt cannot remove a required plugin from the expected set.

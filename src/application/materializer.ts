@@ -61,6 +61,11 @@ import {
 } from "./checkSteps.js";
 import { withVaultLock } from "./lock.js";
 import {
+  prepareStateFolder,
+  stateFolderOf,
+  type StatePlaces,
+} from "./stateFolder.js";
+import {
   recoverIncompleteTransaction,
   replaceManagedState,
   type ManagedStateTransaction,
@@ -77,6 +82,8 @@ export interface MaterializerDependencies {
 export interface ApplyOptions {
   readonly vault: string;
   readonly root?: string;
+  /** State folder that holds the lock, the journal and the transaction roots; `.kataskeue/` in the vault by default. */
+  readonly stateDir?: string;
   readonly profile: PluginProfile;
   readonly localOverrides?: LocalOverrides;
   readonly localSettingsSources?: LocalSettingsSources;
@@ -86,6 +93,8 @@ export interface ApplyOptions {
 export interface CheckOptions {
   readonly vault: string;
   readonly root?: string;
+  /** State folder that holds the lock and the journal; `.kataskeue/` in the vault by default. */
+  readonly stateDir?: string;
   readonly profile: PluginProfile;
   readonly localOverrides?: LocalOverrides;
   readonly localSettingsSources?: LocalSettingsSources;
@@ -125,7 +134,11 @@ export async function applyProfile(
     localOverrides,
     localSettingsSources,
   );
-  return withVaultLock(vault, () =>
+  const places = await prepareStateFolder(
+    vault,
+    stateFolderOf(vault, options.stateDir),
+  );
+  return withVaultLock(vault, places, () =>
     applyProfileLocked(
       {
         ...options,
@@ -134,6 +147,7 @@ export async function applyProfile(
         localOverrides,
         localSettingsSources,
       },
+      places,
       dependencies,
     ),
   );
@@ -141,16 +155,17 @@ export async function applyProfile(
 
 async function applyProfileLocked(
   options: ApplyOptions,
+  places: StatePlaces,
   dependencies: MaterializerDependencies,
 ): Promise<InstallationReceipt> {
   const vault = resolve(options.vault);
   const root = resolve(options.root ?? vault);
   const overrides = options.localOverrides ?? {};
   const localSettingsSources = options.localSettingsSources ?? {};
-  await recoverIncompleteTransaction(vault);
+  await recoverIncompleteTransaction(vault, places.folder);
 
   const targetObsidian = join(vault, ".obsidian");
-  const transactionRoot = await mkdtemp(join(vault, ".kataskeue-"));
+  const transactionRoot = await mkdtemp(places.transactionPrefix);
   const stageVault = join(transactionRoot, "vault");
   const stagedObsidian = join(stageVault, ".obsidian");
   const downloadRoot = join(transactionRoot, "bundles");
@@ -275,6 +290,7 @@ async function applyProfileLocked(
       stagedObsidian,
       targetObsidian,
       transactionRoot,
+      places.journal,
       dependencies.replacements,
     );
     transaction = activeTransaction;
@@ -331,7 +347,11 @@ export async function checkProfile(
     localOverrides,
     localSettingsSources,
   );
-  return withVaultLock(vault, () =>
+  const places = await prepareStateFolder(
+    vault,
+    stateFolderOf(vault, options.stateDir),
+  );
+  return withVaultLock(vault, places, () =>
     checkProfileLocked(
       {
         ...options,
@@ -340,6 +360,7 @@ export async function checkProfile(
         localOverrides,
         localSettingsSources,
       },
+      places,
       dependencies,
     ),
   );
@@ -347,12 +368,13 @@ export async function checkProfile(
 
 async function checkProfileLocked(
   options: CheckOptions,
+  places: StatePlaces,
   dependencies: CheckDependencies,
 ): Promise<InstallationReceipt> {
   const vault = resolve(options.vault);
   const root = resolve(options.root ?? vault);
   const cursor = dependencies.cursor ?? new CheckCursor();
-  await recoverIncompleteTransaction(vault);
+  await recoverIncompleteTransaction(vault, places.folder);
   const obsidian = join(vault, ".obsidian");
   const receiptPath = join(obsidian, "plugin-installation.json");
   const atReceipt = (rule: CheckRuleId, locus = "") =>

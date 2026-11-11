@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -95,4 +95,22 @@ test("writes a findings log at -o and exits with status 1 on a drift", async () 
     await readFile(join(vault, "build", "k.sarif"), "utf8"),
   ) as { runs: Array<{ results: unknown[] }> };
   assert.equal(log.runs[0]?.results.length, 1);
+});
+
+test("takes the state folder from --state-dir, relative to the current folder", async () => {
+  const vault = await vaultWithRecord();
+  await mkdir(join(vault, "state"));
+  const lock = join(vault, "state", "vault.lock");
+  await writeFile(lock, `${JSON.stringify({ pid: 1, token: "held" })}\n`);
+  const held = run(["check", "--state-dir", "state"], { cwd: vault });
+  assert.equal(held.status, 1);
+  assert.ok(held.stderr.includes(lock));
+  assert.equal(run(["check"], { cwd: vault }).status, 1);
+  assert.ok((await readdir(vault)).includes(".kataskeue"));
+
+  const inside = run(["check", "--state-dir", ".obsidian/state"], {
+    cwd: vault,
+  });
+  assert.equal(inside.status, 2);
+  assert.match(inside.stderr, /state folder cannot lie in/);
 });

@@ -22,12 +22,12 @@ import {
 import { LauncherBundleProvider } from "./infrastructure/launcherBundleProvider.js";
 import { GitOverrideInspector } from "./infrastructure/gitOverrideInspector.js";
 import { ObsidianLauncherInstaller } from "./infrastructure/obsidianLauncherInstaller.js";
-import { FileFormatError, ProfileError } from "./errors.js";
+import { FileFormatError, ProfileError, StateFolderError } from "./errors.js";
 import { createSettingsAdapters } from "./infrastructure/settings/settingsAdapters.js";
 import { pathWithin, sarifLog } from "./infrastructure/sarifLog.js";
 
 const USAGE =
-  "usage: kataskeue <apply|check> [-r ROOT] [--vault PATH] [--record PATH] [--local-override PATH] [--local-settings PATH] [--delivery] [--format text|sarif] [-o PATH]\n       kataskeue -v|--version";
+  "usage: kataskeue <apply|check> [-r ROOT] [--vault PATH] [--state-dir PATH] [--record PATH] [--local-override PATH] [--local-settings PATH] [--delivery] [--format text|sarif] [-o PATH]\n       kataskeue -v|--version";
 
 /** Name of the canonical record at the root, read when `--record` is absent. */
 const RECORD_FILE = "obsidian-plugins.yml";
@@ -43,6 +43,7 @@ const EXIT = { problem: 1, usage: 2 } as const;
 interface Inputs {
   readonly vault: string;
   readonly root: string;
+  readonly stateDir?: string;
   readonly profile: ReturnType<typeof parseProfile>;
   readonly localOverrides: LocalOverrides;
   readonly localSettingsSources: LocalSettingsSources;
@@ -52,6 +53,8 @@ interface Inputs {
 interface InputPaths {
   readonly root: string;
   readonly vault: string;
+  /** State folder named by `--state-dir`; the materializer defaults to `.kataskeue/` in the vault. */
+  readonly stateDir: string | undefined;
   readonly record: string;
   readonly localOverride: string | undefined;
   readonly localSettings: string | undefined;
@@ -93,6 +96,7 @@ async function readInputs(paths: InputPaths): Promise<Inputs> {
   return {
     vault: paths.vault,
     root: paths.root,
+    ...(paths.stateDir === undefined ? {} : { stateDir: paths.stateDir }),
     profile,
     localOverrides,
     localSettingsSources,
@@ -127,6 +131,7 @@ function parseCommand(argv: readonly string[]) {
       options: {
         root: { type: "string", short: "r" },
         vault: { type: "string" },
+        "state-dir": { type: "string" },
         record: { type: "string" },
         "local-override": { type: "string" },
         "local-settings": { type: "string" },
@@ -167,6 +172,10 @@ async function main(argv: readonly string[]): Promise<void> {
   const paths: InputPaths = {
     root,
     vault: resolve(values.vault ?? root),
+    stateDir:
+      values["state-dir"] === undefined
+        ? undefined
+        : resolve(values["state-dir"]),
     record: resolve(values.record ?? join(root, RECORD_FILE)),
     localOverride: values["local-override"],
     localSettings: values["local-settings"],
@@ -233,14 +242,15 @@ async function main(argv: readonly string[]): Promise<void> {
 }
 
 /**
- * Return the exit status of an error: 2 for a wrong invocation or an invalid input, 1 for a
- * drift found by the check or a failure of the command.
+ * Return the exit status of an error: 2 for a wrong invocation, an invalid input or an unusable
+ * state folder, 1 for a drift found by the check or a failure of the command.
  */
 function exitStatus(error: unknown): number {
   if (
     error instanceof UsageError ||
     error instanceof ProfileError ||
-    error instanceof FileFormatError
+    error instanceof FileFormatError ||
+    error instanceof StateFolderError
   ) {
     return EXIT.usage;
   }

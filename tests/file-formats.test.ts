@@ -48,10 +48,11 @@ async function projectThrough(
 
 async function recoverJournal(file: Body): Promise<unknown> {
   const vault = await mkdtemp(join(tmpdir(), "kataskeue-format-"));
-  const journal = join(vault, ".kataskeue-transaction.json");
+  await mkdir(join(vault, ".kataskeue"));
+  const journal = join(vault, ".kataskeue", "transaction.json");
   const contents = JSON.stringify({
     ...file,
-    transaction_root: join(vault, ".kataskeue-recovery"),
+    transaction_root: join(vault, ".kataskeue", "transaction-recovery"),
     target_obsidian: join(vault, ".obsidian"),
   });
   await writeFile(journal, contents);
@@ -204,7 +205,8 @@ for (const { name, identifier, adapter, body } of adapterFormats) {
 
 test("transaction journal: is written with _schema as its first key", async () => {
   const vault = await mkdtemp(join(tmpdir(), "kataskeue-format-"));
-  const transactionRoot = join(vault, ".kataskeue-write");
+  const transactionRoot = join(vault, ".kataskeue", "transaction-write");
+  const journalPath = join(vault, ".kataskeue", "transaction.json");
   const staged = join(transactionRoot, "vault", ".obsidian");
   await mkdir(join(staged, "plugins"), { recursive: true });
   await writeFile(join(staged, "community-plugins.json"), "[]\n");
@@ -213,10 +215,12 @@ test("transaction journal: is written with _schema as its first key", async () =
     staged,
     join(vault, ".obsidian"),
     transactionRoot,
+    journalPath,
   );
-  const journal = JSON.parse(
-    await readFile(join(vault, ".kataskeue-transaction.json"), "utf8"),
-  ) as Record<string, unknown>;
+  const journal = JSON.parse(await readFile(journalPath, "utf8")) as Record<
+    string,
+    unknown
+  >;
   assert.equal(Object.keys(journal)[0], "_schema");
   assert.equal(journal._schema, "kataskeue:transaction@1");
   await transaction.finalize();

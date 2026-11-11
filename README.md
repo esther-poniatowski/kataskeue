@@ -117,7 +117,7 @@ Both commands work on the root of a consumer repository. The root is the first o
 
 Kataskeue has no configuration file of its own, so it searches no ancestor folder. The canonical record is `obsidian-plugins.yml` at the root, and the vault is the root, unless the options `--record PATH` and `--vault PATH` name others. A path given on the command line is relative to the current folder. A path written in the record or in a local record is relative to the root.
 
-`apply` regenerates the managed plugin state of the vault, `.obsidian/plugins/` and `community-plugins.json`, from the record, so it overwrites that state without `--force`. The option `-v`, `--version` prints the version of the tool. The exit status is 0 on success and 1 when `check` finds a drift or a command fails. It is 2 on a usage error or an invalid input: an unknown option, a missing or invalid record, or an unusable settings source.
+`apply` regenerates the managed plugin state of the vault, `.obsidian/plugins/` and `community-plugins.json`, from the record, so it overwrites that state without `--force`. The option `-v`, `--version` prints the version of the tool. The exit status is 0 on success and 1 when `check` finds a drift or a command fails. It is 2 on a usage error or an invalid input: an unknown option, a missing or invalid record, an unusable settings source, or an unusable [state folder](#state-folder).
 
 An untracked override file may select a local build. The selected plugin must also occur in the profile.
 
@@ -149,14 +149,28 @@ kataskeue apply --local-settings obsidian-plugin-settings.local.yml
 
 Pass the same local-settings record to `check`. The materializer reads exactly one source. A local source replaces the canonical source in full. The delivery flag `--delivery` rejects local builds and local settings sources.
 
-Each command holds `.kataskeue.lock` for the complete check or change. A normal exit removes the lock. After an abnormal process exit, confirm that no materializer command is running before removing this file manually.
+## State folder
+
+Kataskeue keeps the files that only it reads in one state folder, `.kataskeue/` at the root of the vault. The option `--state-dir PATH` names another folder, relative to the current folder. Every command on one vault must name the same folder, since the lock in that folder keeps two commands apart. The folder holds three kinds of file:
+
+| File                    | Role                                                                              |
+| ----------------------- | --------------------------------------------------------------------------------- |
+| `vault.lock`            | held by each command for the complete check or change                             |
+| `transaction.json`      | journal of a replacement, from which the next command restores an interrupted one |
+| `transaction-<suffix>/` | staging vault, fetched bundles and backup of one `apply`                          |
+
+A normal exit removes the lock, the journal and the transaction folder, and leaves the state folder empty. After an abnormal process exit, confirm that no materializer command is running before removing `vault.lock` manually. The tool never deletes a lock by itself.
+
+A replacement renames the managed paths between a transaction folder and `.obsidian/`, and a rename is atomic only within one file system. Therefore, a command stops with status 2 when the state folder lies on another file system than `.obsidian/`, lies inside `.obsidian/`, or is the vault itself. A consumer repository excludes the state folder from version control with the ignore rule `.kataskeue/`.
+
+Releases before the state folder wrote `.kataskeue.lock`, `.kataskeue-transaction.json` and `.kataskeue-*/` at the root of the vault. A lock left there blocks every command, as a current lock does. A journal left there is recovered before any other step, together with its transaction folder. A folder `.kataskeue-*/` without a journal holds no backup, and can be deleted.
 
 ## Findings log
 
 The `check` command can write its result as a SARIF 2.1.0 log, in the findings profile of the gate [Elenchos](https://github.com/esther-poniatowski/elenchos):
 
 ```sh
-kataskeue check --format sarif --output build/kataskeue.sarif
+kataskeue check --format sarif --output build/kataskeue/check.sarif
 ```
 
 The log states every path relative to the root, and the vault must lie under the root. A drift yields one result, located at the file or folder that drifted. The check stops at its first drift, so the run declares itself incomplete. The [findings output](docs/adr/findings-output.md) lists the rules and their locations.

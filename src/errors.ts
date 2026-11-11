@@ -38,6 +38,11 @@ export class ReplacementError extends Error {
   override readonly name = "ReplacementError";
 }
 
+/** The state folder cannot hold the lock and the transactions of the vault. */
+export class StateFolderError extends Error {
+  override readonly name = "StateFolderError";
+}
+
 /** Another process owns the target vault state. */
 export class OperationLockedError extends Error {
   override readonly name = "OperationLockedError";

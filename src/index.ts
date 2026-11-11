@@ -31,6 +31,7 @@ export {
   ProfileError,
   ProviderUnsupportedError,
   ReplacementError,
+  StateFolderError,
 } from "./errors.js";
 export type {
   BundleAcquisition,

@@ -1,20 +1,27 @@
 import { randomUUID } from "node:crypto";
-import { open, readFile, unlink } from "node:fs/promises";
-import { join } from "node:path";
+import { access, open, readFile, unlink } from "node:fs/promises";
 
 import { OperationLockedError } from "../errors.js";
+import { formerPlaces, type StatePlaces } from "./stateFolder.js";
 
 interface LockOwner {
   readonly pid: number;
   readonly token: string;
 }
 
-/** Serialize recovery and state inspection for one vault. */
+/**
+ * Serialize recovery and state inspection for one vault.
+ *
+ * The lock lies in the state folder. A lock that an earlier release left at the root of the vault
+ * blocks the command too, since a run of that release may still be changing the vault.
+ */
 export async function withVaultLock<T>(
   vault: string,
+  places: StatePlaces,
   task: () => Promise<T>,
 ): Promise<T> {
-  const path = join(vault, ".kataskeue.lock");
+  await rejectFormerLock(formerPlaces(vault).lock);
+  const path = places.lock;
   const owner: LockOwner = { pid: process.pid, token: randomUUID() };
   await acquire(path, owner);
   try {
@@ -22,6 +29,20 @@ export async function withVaultLock<T>(
   } finally {
     await release(path, owner);
   }
+}
+
+async function rejectFormerLock(path: string): Promise<void> {
+  try {
+    await access(path);
+  } catch (error) {
+    if (hasCode(error, "ENOENT")) {
+      return;
+    }
+    throw error;
+  }
+  throw new OperationLockedError(
+    `a vault lock of an earlier release exists at its former place; confirm that no materializer command is running before removing it: ${path}`,
+  );
 }
 
 async function acquire(path: string, owner: LockOwner): Promise<void> {
