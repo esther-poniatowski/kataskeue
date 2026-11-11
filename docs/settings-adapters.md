@@ -2,10 +2,10 @@
 
 The settings adapters generate complete native plugin settings from portable YAML sources. A profile selects an adapter through `settings.adapter`. The canonical source of an adapter has one of two places:
 
-- the adapter of a tool of the workspace reads the settings file of that tool, at `config/tools/<tool>.yml` or `<tool>.yml` below the root, and the profile names no `settings.source`;
+- the adapter of a tool of the workspace reads the configuration file of that tool, at `config/tools/<tool>.yml` or `<tool>.yml` below the root, and the profile names no `settings.source`;
 - any other adapter reads the YAML source named by `settings.source`.
 
-The [command-line conventions](https://github.com/esther-poniatowski/keystone/blob/main/docs/internals/cli-conventions.md) of the workspace fix the place of a tool settings file. When files exist at both places, the materializer stops with an error that names both. A profile that names `settings.source` for such an adapter is invalid.
+The [command-line conventions](https://github.com/esther-poniatowski/keystone/blob/main/docs/internals/cli-conventions.md) of the workspace fix the place of a tool configuration file. When files exist at both places, the materializer stops with an error that names both. A profile that names `settings.source` for such an adapter is invalid.
 
 The local-settings flag `--local-settings` may select a complete local source. The local record maps a plugin identifier to one source path. The adapter reads either that source or the canonical source. Both paths resolve from the root of the consumer repository. Delivery mode rejects every active local source.
 
@@ -15,7 +15,7 @@ During `check`, each adapter regenerates its expected native file. Therefore, th
 
 ## Ekphrasis
 
-The adapter identifier `ekphrasis@1` reads the settings file of Ekphrasis, `config/tools/ekphrasis.yml` or `ekphrasis.yml` at the root. It accepts the source below:
+The adapter identifier `ekphrasis@1` reads the configuration file of Ekphrasis, `config/tools/ekphrasis.yml` or `ekphrasis.yml` at the root. It accepts the source below:
 
 ```yaml
 _schema: ekphrasis:configuration@1

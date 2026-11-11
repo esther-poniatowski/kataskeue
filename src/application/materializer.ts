@@ -813,7 +813,7 @@ function requireSettingsAdapter(
  * Select the adapter of a projected plugin and the one source that it reads.
  *
  * A local source replaces the canonical source in full. The canonical source of an adapter
- * that reads the settings file of its tool lies at the place fixed by the command-line
+ * that reads the configuration file of its tool lies at the place fixed by the command-line
  * conventions; the record names the source of every other adapter.
  */
 async function selectSettingsSource(
@@ -856,7 +856,7 @@ type CanonicalSettingsSource =
   | { readonly kind: "declared"; readonly path: string }
   | { readonly kind: "tool"; readonly name: string };
 
-/** Pair the source declared by the record with the tool settings file of the adapter. */
+/** Pair the source declared by the record with the tool configuration file of the adapter. */
 function canonicalSettingsSource(
   pluginId: string,
   declared: string | undefined,
@@ -865,7 +865,7 @@ function canonicalSettingsSource(
   if (toolFile !== undefined) {
     if (declared !== undefined) {
       throw new ProfileError(
-        `${pluginId} reads the tool settings file ${toolFile}, whose place is fixed; remove settings.source from the record`,
+        `${pluginId} reads the tool configuration file ${toolFile}, whose place is fixed; remove settings.source from the record`,
       );
     }
     return { kind: "tool", name: toolFile };
@@ -879,7 +879,7 @@ function canonicalSettingsSource(
 }
 
 /**
- * Return the root-relative path of the settings file of a tool.
+ * Return the root-relative path of the configuration file of a tool.
  *
  * The file lies at `config/tools/<name>` or at `<name>` below the root. Two files are an error
  * that names both, since a silent precedence would apply a file that the researcher does not
@@ -899,13 +899,13 @@ async function locateToolSettingsFile(
   }
   if (present.length > 1) {
     throw new ProfileError(
-      `${pluginId} has two settings files, ${present.map((path) => join(root, path)).join(" and ")}; keep one`,
+      `${pluginId} has two configuration files, ${present.map((path) => join(root, path)).join(" and ")}; keep one`,
     );
   }
   const [found] = present;
   if (found === undefined) {
     throw new ProfileError(
-      `${pluginId} settings file is missing: looked for ${candidates.map((path) => join(root, path)).join(" and ")}`,
+      `${pluginId} configuration file is missing: looked for ${candidates.map((path) => join(root, path)).join(" and ")}`,
     );
   }
   return found;

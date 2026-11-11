@@ -112,7 +112,7 @@ function packageVersion(): string {
  * Resolve the root of the consumer repository.
  *
  * The option `--root` comes first, then the variable `KATASKEUE_ROOT`, then the current
- * folder. Kataskeue has no settings file of its own, so it searches no ancestor.
+ * folder. Kataskeue has no configuration file of its own, so it searches no ancestor.
  */
 function resolveRoot(option: string | undefined): string {
   const variable = process.env.KATASKEUE_ROOT;

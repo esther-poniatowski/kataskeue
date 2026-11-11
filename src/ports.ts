@@ -28,14 +28,14 @@ export interface PluginInstaller {
 export interface SettingsProjectionContext {
   /** Folder of the vault that receives the native settings. */
   readonly consumerRoot: string;
-  /** Root of the consumer repository, from which a tool settings file resolves its paths. */
+  /** Root of the consumer repository, from which a tool configuration file resolves its paths. */
   readonly root: string;
 }
 
 /** Generates a complete native settings file from a project-owned source. */
 export interface SettingsAdapter {
   /**
-   * Name of the settings file of the tool, such as `ekphrasis.yml`, when the source is that file.
+   * Name of the configuration file of the tool, such as `ekphrasis.yml`, when the source is that file.
    *
    * The command-line conventions of the workspace fix its place: `config/tools/<name>` or
    * `<name>` below the root. The record then names no `settings.source`.

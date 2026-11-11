@@ -43,7 +43,7 @@ const sourceSchema = z
   .strict();
 
 /**
- * Projects the settings file of Ekphrasis into native plugin keys.
+ * Projects the configuration file of Ekphrasis into native plugin keys.
  *
  * The file `ekphrasis.yml` writes its paths relative to the root of the repository, whereas
  * the plugin resolves the native paths inside the vault; the adapter rewrites each path from
@@ -63,7 +63,7 @@ export class EkphrasisSettingsAdapter implements SettingsAdapter {
   ): Promise<void> {
     const content = parseSettingsSource(
       await readFile(source, "utf8"),
-      "Ekphrasis settings source",
+      "Ekphrasis configuration file",
     );
     requireFileFormat(
       content,
@@ -73,7 +73,7 @@ export class EkphrasisSettingsAdapter implements SettingsAdapter {
     const parsed = sourceSchema.safeParse(content);
     if (!parsed.success) {
       throw new ProfileError(
-        `invalid Ekphrasis settings: ${parsed.error.issues
+        `invalid Ekphrasis configuration file: ${parsed.error.issues
           .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
           .join("; ")}`,
       );

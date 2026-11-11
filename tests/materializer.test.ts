@@ -624,7 +624,7 @@ test("reprojects settings while checking dependent inputs", async () => {
   );
 });
 
-test("reads a tool settings file at the one place that the conventions fix", async () => {
+test("reads a tool configuration file at the one place that the conventions fix", async () => {
   const fixture = await createFixture({
     settings: { policy: "losslessly-projected", adapter: "sample" },
   });

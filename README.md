@@ -81,7 +81,7 @@ Each plugin selects one settings policy:
 | `project-owned`        | requires a declared project file and removes native `data.json`                                            |
 | `losslessly-projected` | generates native `data.json` through a named adapter; the CLI supplies the supported adapters listed below |
 
-A `losslessly-projected` record names its source through `settings.source`, unless its adapter reads the settings file of its tool. That file has a fixed place under the [command-line conventions](https://github.com/esther-poniatowski/keystone/blob/main/docs/internals/cli-conventions.md): `config/tools/<tool>.yml` or `<tool>.yml` at the root. The record then names no source, and two files at both places stop the command with an error that names both.
+A `losslessly-projected` record names its source through `settings.source`, unless its adapter reads the configuration file of its tool. That file has a fixed place under the [command-line conventions](https://github.com/esther-poniatowski/keystone/blob/main/docs/internals/cli-conventions.md): `config/tools/<tool>.yml` or `<tool>.yml` at the root. The record then names no source, and two files at both places stop the command with an error that names both.
 
 A plugin may also declare root-level `mutable_json_files`. A declared file may be absent. When present, its path must have a lowercase JSON filename, and its content must remain valid JSON. Names must be unique, sorted and distinct from the bundle files, the settings file and the development marker. Other mutable file types and directories are unsupported, and undeclared entries fail reconciliation.
 
@@ -115,7 +115,7 @@ Both commands work on the root of a consumer repository. The root is the first o
 2. the environment variable `KATASKEUE_ROOT`;
 3. the current folder.
 
-Kataskeue has no settings file of its own, so it searches no ancestor folder. The canonical record is `obsidian-plugins.yml` at the root, and the vault is the root, unless the options `--record PATH` and `--vault PATH` name others. A path given on the command line is relative to the current folder. A path written in the record or in a local record is relative to the root.
+Kataskeue has no configuration file of its own, so it searches no ancestor folder. The canonical record is `obsidian-plugins.yml` at the root, and the vault is the root, unless the options `--record PATH` and `--vault PATH` name others. A path given on the command line is relative to the current folder. A path written in the record or in a local record is relative to the root.
 
 `apply` regenerates the managed plugin state of the vault, `.obsidian/plugins/` and `community-plugins.json`, from the record, so it overwrites that state without `--force`. The option `-v`, `--version` prints the version of the tool. The exit status is 0 on success and 1 when `check` finds a drift or a command fails. It is 2 on a usage error or an invalid input: an unknown option, a missing or invalid record, or an unusable settings source.
 

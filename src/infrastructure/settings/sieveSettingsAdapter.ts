@@ -81,7 +81,7 @@ export class SieveSettingsAdapter implements SettingsAdapter {
   ): Promise<void> {
     const content = parseSettingsSource(
       await readFile(source, "utf8"),
-      "Sieve settings source",
+      "Sieve configuration file",
     );
     requireFileFormat(
       content,
@@ -91,7 +91,7 @@ export class SieveSettingsAdapter implements SettingsAdapter {
     const parsed = sourceSchema.safeParse(content);
     if (!parsed.success) {
       throw new ProfileError(
-        `invalid Sieve settings: ${parsed.error.issues
+        `invalid Sieve configuration file: ${parsed.error.issues
           .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
           .join("; ")}`,
       );
