@@ -38,6 +38,7 @@ const sourceSchema = z
     _schema: z.literal(SOURCE_FORMAT),
     schema_registry: literalRootPathSchema,
     path_rules: z.array(pathRuleSchema),
+    excluded_paths: z.array(rootRelativePathSchema).optional(),
     commit_delay: z.number().int().nonnegative(),
   })
   .strict();
@@ -85,6 +86,9 @@ export class EkphrasisSettingsAdapter implements SettingsAdapter {
         pattern: toVault(rule.pattern),
         schema: toVault(rule.schema),
       })),
+      ...(parsed.data.excluded_paths === undefined
+        ? {}
+        : { excludedPaths: parsed.data.excluded_paths.map(toVault) }),
       commitDelay: parsed.data.commit_delay,
     };
     await writeFile(destination, `${JSON.stringify(settings, null, 2)}\n`);

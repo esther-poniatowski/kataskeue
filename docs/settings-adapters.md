@@ -23,10 +23,12 @@ schema_registry: specs/schema-registry.yml
 path_rules:
   - pattern: projects/**/project.yml
     schema: utils/schemas/project.schema.yaml
+excluded_paths:
+  - templates/**
 commit_delay: 1000
 ```
 
-The registry path and each rule path are relative to the root, wherever the file lies. Absolute paths, parent traversal and backslashes are invalid. The commit delay is a nonnegative integer measured in milliseconds. The adapter writes the native keys `schemaRegistry`, `pathRules` and `commitDelay`. The plugin resolves these native paths inside the vault, so the adapter prefixes each path with the folder of the root inside the vault. A root outside the vault is an error.
+The registry path, each rule path and each excluded path are relative to the root, wherever the file lies. Absolute paths, parent traversal and backslashes are invalid. The key `excluded_paths` is optional; it lists the glob patterns of the files that Ekphrasis binds to no schema, such as note skeletons. The commit delay is a nonnegative integer measured in milliseconds. The adapter writes the native keys `schemaRegistry`, `pathRules` and `commitDelay`, and `excludedPaths` when the source lists excluded paths. The plugin resolves these native paths inside the vault, so the adapter prefixes each path with the folder of the root inside the vault. A root outside the vault is an error.
 
 ## Full Calendar Remastered
 

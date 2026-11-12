@@ -160,6 +160,8 @@ test("writes the root-relative Ekphrasis paths as vault paths", async () => {
       "path_rules:",
       '  - pattern: "**/{glossary,*.glossary}.yml"',
       "    schema: specs/schemas/glossary.schema.yaml",
+      "excluded_paths:",
+      '  - "templates/**"',
       "commit_delay: 0",
       "",
     ].join("\n"),
@@ -174,6 +176,7 @@ test("writes the root-relative Ekphrasis paths as vault paths", async () => {
         schema: "projects/sample/specs/schemas/glossary.schema.yaml",
       },
     ],
+    excludedPaths: ["projects/sample/templates/**"],
     commitDelay: 0,
   });
   await assert.rejects(
